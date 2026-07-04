@@ -102,13 +102,13 @@ MAIL_FROM=""
 Az elso sikeres API deploy utan futtasd Railway terminalbol vagy one-off commandbol:
 
 ```bash
-corepack pnpm --filter @bk-workforce/api prisma:deploy
+pnpm --filter @bk-workforce/api prisma:deploy
 ```
 
 Ha indulashoz kell a seed adat:
 
 ```bash
-corepack pnpm --filter @bk-workforce/api prisma:seed
+pnpm --filter @bk-workforce/api prisma:seed
 ```
 
 Ellenorzes:
@@ -126,7 +126,7 @@ Beallitasok:
 ```text
 Framework preset: None
 Root directory: /
-Build command: corepack pnpm --filter @bk-workforce/web build
+Build command: npm install -g pnpm@9.15.0 && pnpm install --frozen-lockfile && pnpm --filter @bk-workforce/web build
 Build output directory: apps/web/dist
 ```
 

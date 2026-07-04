@@ -4,7 +4,7 @@
     "builder": "NIXPACKS"
   },
   "deploy": {
-    "startCommand": "corepack pnpm --filter @bk-workforce/api start",
+    "startCommand": "pnpm --filter @bk-workforce/api start",
     "healthcheckPath": "/health",
     "healthcheckTimeout": 300,
     "restartPolicyType": "ON_FAILURE",
