@@ -1,0 +1,14 @@
+[phases.setup]
+nixPkgs = ["nodejs_22", "pnpm"]
+
+[phases.install]
+cmds = ["corepack enable", "corepack pnpm install --frozen-lockfile"]
+
+[phases.build]
+cmds = [
+  "corepack pnpm --filter @bk-workforce/api prisma:generate",
+  "corepack pnpm --filter @bk-workforce/api build"
+]
+
+[start]
+cmd = "corepack pnpm --filter @bk-workforce/api start"

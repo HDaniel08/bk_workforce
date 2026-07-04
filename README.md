@@ -22,6 +22,7 @@ JWT_SECRET="MagdiToltosBased"
 JWT_EXPIRES_IN="1d"
 APP_URL="http://localhost:5173"
 API_PORT="3000"
+VITE_API_URL="http://localhost:3000"
 MAIL_HOST=""
 MAIL_PORT=""
 MAIL_USER=""
@@ -70,6 +71,89 @@ pnpm build:api
 pnpm build:web
 ```
 
+## Elesites Railway + Cloudflare Pages
+
+Javasolt felosztas:
+
+- API: Railway
+- Postgres adatbazis: Railway Postgres
+- Frontend: Cloudflare Pages
+- DNS/domain: Cloudflare
+
+### 1. Railway API
+
+Railway-en hozz letre egy uj projektet GitHub repo alapjan, majd adj hozza egy Postgres adatbazist. A repo gyokerben talalhato `nixpacks.toml` es `railway.json` az API buildet es startot allitja be.
+
+Railway service valtozok:
+
+```env
+DATABASE_URL="<Railway Postgres DATABASE_URL>"
+JWT_SECRET="<eros-random-secret>"
+JWT_EXPIRES_IN="1d"
+APP_URL="https://<cloudflare-pages-vagy-sajat-domain>"
+API_PORT="3000"
+MAIL_HOST=""
+MAIL_PORT=""
+MAIL_USER=""
+MAIL_PASS=""
+MAIL_FROM=""
+```
+
+Az elso sikeres API deploy utan futtasd Railway terminalbol vagy one-off commandbol:
+
+```bash
+corepack pnpm --filter @bk-workforce/api prisma:deploy
+```
+
+Ha indulashoz kell a seed adat:
+
+```bash
+corepack pnpm --filter @bk-workforce/api prisma:seed
+```
+
+Ellenorzes:
+
+```text
+https://<railway-api-domain>/health
+```
+
+### 2. Cloudflare Pages frontend
+
+Cloudflare Pages-ben hozz letre uj projektet ugyanarra a GitHub repora.
+
+Beallitasok:
+
+```text
+Framework preset: None
+Root directory: /
+Build command: corepack pnpm --filter @bk-workforce/web build
+Build output directory: apps/web/dist
+```
+
+Cloudflare Pages environment variables:
+
+```env
+VITE_API_URL="https://<railway-api-domain>"
+```
+
+A `apps/web/public/_redirects` fajl gondoskodik arrol, hogy frissites utan is mukodjenek a React route-ok, peldaul a `/login` es `/manager/...` oldalak.
+
+### 3. Saját domain
+
+Ha van sajat domain Cloudflare-ben:
+
+- Frontend: `app.<domain>` vagy maga a root domain menjen Cloudflare Pages-re.
+- API: `api.<domain>` menjen Railway custom domainre.
+- Railway `APP_URL` erteke legyen a frontend vegleges URL-je.
+- Cloudflare `VITE_API_URL` erteke legyen az API vegleges URL-je.
+
+Pelda:
+
+```env
+APP_URL="https://workforce.ceg.hu"
+VITE_API_URL="https://api.workforce.ceg.hu"
+```
+
 ## Adatbazis es Prisma
 
 Prisma client generalas:
@@ -90,7 +174,7 @@ Deploy migraciok futtatasa:
 pnpm --filter @bk-workforce/api prisma:deploy
 ```
 
-Seed futtatasa demo adatokkal:
+Seed futtatasa kezdo adatokkal:
 
 ```bash
 pnpm --filter @bk-workforce/api prisma:seed
@@ -114,7 +198,7 @@ A seed fajl itt talalhato:
 apps/api/prisma/seed.ts
 ```
 
-## Auth demo adatok
+## Auth seed adatok
 
 Seed utan ezekkel a fiokokkal lehet belepni:
 
@@ -125,22 +209,22 @@ password: Admin123!
 route: /superadmin/login
 
 Manager:
-email: manager@bk-app.local
+email: andras.fodor@bk-app.local
 password: Manager123!
 route: /login
 
 Student worker:
-email: student@bk-app.local
+email: bence.barta@bk-app.local
 password: Student123!
 route: /login
 
 Full-time worker:
-email: worker@bk-app.local
+email: adam.balla@bk-app.local
 password: Worker123!
 route: /login
 ```
 
-A manager es worker demo felhasznaloknal `mustChangePassword=true`, ezert sikeres elso login utan a frontend a `/change-password` oldalra iranyit.
+A manager es worker seed felhasznaloknal `mustChangePassword=true`, ezert sikeres elso login utan a frontend a `/change-password` oldalra iranyit.
 
 ## Auth endpointok
 
@@ -173,9 +257,9 @@ Login valasz:
     "tenantId": "...",
     "tenantName": "BK Pécs Drive 2",
     "tenantSlug": "bk-pecs-drive-2",
-    "email": "manager@bk-app.local",
-    "firstName": "Demo",
-    "lastName": "Manager",
+    "email": "andras.fodor@bk-app.local",
+    "firstName": "Andras",
+    "lastName": "Fodor",
     "role": "EMPLOYEE",
     "employeeSubRole": "MANAGER",
     "workerType": null,
