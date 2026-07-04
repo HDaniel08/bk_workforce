@@ -1,0 +1,12 @@
+.git
+.env
+.env.*
+node_modules
+**/node_modules
+**/dist
+apps/web/dist
+.railway
+.vercel
+.DS_Store
+npm-debug.log
+pnpm-debug.log

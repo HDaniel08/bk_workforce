@@ -82,7 +82,7 @@ Javasolt felosztas:
 
 ### 1. Railway API
 
-Railway-en hozz letre egy uj projektet GitHub repo alapjan, majd adj hozza egy Postgres adatbazist. A repo gyokerben talalhato `nixpacks.toml` es `railway.json` az API buildet es startot allitja be.
+Railway-en hozz letre egy uj projektet GitHub repo alapjan, majd adj hozza egy Postgres adatbazist. A repo gyokerben talalhato `Dockerfile` es `railway.json` az API buildet es startot allitja be.
 
 Railway service valtozok:
 
