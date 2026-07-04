@@ -1,0 +1,23 @@
+{
+  "name": "bk-workforce-app",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "pnpm@9.15.0",
+  "scripts": {
+    "dev": "corepack pnpm --parallel --filter @bk-workforce/api --filter @bk-workforce/web dev",
+    "dev:api": "corepack pnpm --filter @bk-workforce/api dev",
+    "dev:web": "corepack pnpm --filter @bk-workforce/web dev",
+    "build": "corepack pnpm -r build",
+    "build:api": "corepack pnpm --filter @bk-workforce/api build",
+    "build:web": "corepack pnpm --filter @bk-workforce/web build",
+    "lint": "corepack pnpm -r lint",
+    "typecheck": "corepack pnpm -r typecheck"
+  },
+  "devDependencies": {
+    "@typescript-eslint/eslint-plugin": "^8.19.0",
+    "@typescript-eslint/parser": "^8.19.0",
+    "eslint": "^9.17.0",
+    "prettier": "^3.4.2",
+    "typescript": "^5.7.2"
+  }
+}

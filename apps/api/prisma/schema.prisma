@@ -1,0 +1,267 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  ADMIN
+  EMPLOYEE
+}
+
+enum EmployeeSubRole {
+  MANAGER
+  WORKER
+}
+
+enum WorkerType {
+  STUDENT
+  FULL_TIME
+}
+
+enum ContractHours {
+  HOURS_4
+  HOURS_6
+  HOURS_8
+}
+
+enum AvailabilityPeriodType {
+  WEEKLY
+  MONTHLY
+}
+
+enum AvailabilityStatus {
+  DRAFT
+  SUBMITTED
+  LOCKED
+}
+
+enum AvailabilitySubmissionStatus {
+  OPEN
+  CLOSED
+}
+
+enum AvailabilityDayType {
+  OFF
+  VACATION
+  WORK
+}
+
+enum WorkPreference {
+  ANYTIME
+  TIME_RANGE
+}
+
+enum VacationRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
+}
+
+enum ScheduleWeekStatus {
+  DRAFT
+  PUBLISHED
+  LOCKED
+}
+
+model Tenant {
+  id                          String                       @id @default(cuid())
+  name                        String
+  slug                        String                       @unique
+  city                        String?
+  address                     String?
+  isActive                    Boolean                      @default(true)
+  users                       User[]
+  auditLogs                   AuditLog[]
+  availabilityWeeks           AvailabilityWeek[]
+  availabilitySubmissionWeeks AvailabilitySubmissionWeek[]
+  vacationRequests            VacationRequest[]
+  scheduleWeeks               ScheduleWeek[]
+  shifts                      Shift[]
+  shiftAssignments            ShiftAssignment[]
+  createdAt                   DateTime                     @default(now())
+  updatedAt                   DateTime                     @updatedAt
+}
+
+model AvailabilitySubmissionWeek {
+  id             String                       @id @default(cuid())
+  tenantId       String
+  weekStartDate  DateTime
+  status         AvailabilitySubmissionStatus @default(OPEN)
+  openedByUserId String?
+  closedByUserId String?
+  openedAt       DateTime                     @default(now())
+  closedAt       DateTime?
+  tenant         Tenant                       @relation(fields: [tenantId], references: [id])
+  createdAt      DateTime                     @default(now())
+  updatedAt      DateTime                     @updatedAt
+
+  @@unique([tenantId, weekStartDate])
+  @@index([tenantId])
+  @@index([weekStartDate])
+}
+
+model User {
+  id                       String             @id @default(cuid())
+  tenantId                 String?
+  email                    String             @unique
+  passwordHash             String
+  firstName                String
+  lastName                 String
+  phone                    String?
+  role                     UserRole
+  employeeSubRole          EmployeeSubRole?
+  workerType               WorkerType?
+  contractHours            ContractHours?
+  mustChangePassword       Boolean            @default(false)
+  isActive                 Boolean            @default(true)
+  lastLoginAt              DateTime?
+  tenant                   Tenant?            @relation(fields: [tenantId], references: [id])
+  createdAuditLogs         AuditLog[]         @relation("AuditActor")
+  availabilityWeeks        AvailabilityWeek[]
+  vacationRequests         VacationRequest[]  @relation("VacationRequester")
+  reviewedVacationRequests VacationRequest[]  @relation("VacationReviewer")
+  createdScheduleWeeks     ScheduleWeek[]     @relation("ScheduleCreatedBy")
+  shiftAssignments         ShiftAssignment[]
+  createdAt                DateTime           @default(now())
+  updatedAt                DateTime           @updatedAt
+
+  @@index([tenantId])
+}
+
+model AuditLog {
+  id          String   @id @default(cuid())
+  tenantId    String?
+  actorUserId String?
+  action      String
+  entityType  String
+  entityId    String?
+  metadata    Json?
+  ipAddress   String?
+  userAgent   String?
+  tenant      Tenant?  @relation(fields: [tenantId], references: [id])
+  actor       User?    @relation("AuditActor", fields: [actorUserId], references: [id])
+  createdAt   DateTime @default(now())
+
+  @@index([tenantId])
+  @@index([actorUserId])
+}
+
+model AvailabilityWeek {
+  id             String                 @id @default(cuid())
+  tenantId       String
+  userId         String
+  periodType     AvailabilityPeriodType
+  weekStartDate  DateTime?
+  monthStartDate DateTime?
+  status         AvailabilityStatus     @default(DRAFT)
+  submittedAt    DateTime?
+  tenant         Tenant                 @relation(fields: [tenantId], references: [id])
+  user           User                   @relation(fields: [userId], references: [id])
+  days           AvailabilityDay[]
+  createdAt      DateTime               @default(now())
+  updatedAt      DateTime               @updatedAt
+
+  @@index([tenantId])
+  @@index([userId])
+  @@index([tenantId, weekStartDate])
+  @@index([tenantId, monthStartDate])
+}
+
+model AvailabilityDay {
+  id                 String              @id @default(cuid())
+  availabilityWeekId String
+  date               DateTime
+  type               AvailabilityDayType
+  workPreference     WorkPreference?
+  startTime          String?
+  endTime            String?
+  note               String?
+  availabilityWeek   AvailabilityWeek    @relation(fields: [availabilityWeekId], references: [id], onDelete: Cascade)
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+
+  @@index([availabilityWeekId])
+  @@index([date])
+}
+
+model VacationRequest {
+  id               String                @id @default(cuid())
+  tenantId         String
+  requesterUserId  String
+  reviewedByUserId String?
+  startDate        DateTime
+  endDate          DateTime
+  status           VacationRequestStatus @default(PENDING)
+  reason           String?
+  reviewerNote     String?
+  reviewedAt       DateTime?
+  tenant           Tenant                @relation(fields: [tenantId], references: [id])
+  requester        User                  @relation("VacationRequester", fields: [requesterUserId], references: [id])
+  reviewedBy       User?                 @relation("VacationReviewer", fields: [reviewedByUserId], references: [id])
+  createdAt        DateTime              @default(now())
+  updatedAt        DateTime              @updatedAt
+
+  @@index([tenantId])
+  @@index([requesterUserId])
+  @@index([status])
+  @@index([startDate, endDate])
+}
+
+model ScheduleWeek {
+  id              String             @id @default(cuid())
+  tenantId        String
+  weekStartDate   DateTime
+  status          ScheduleWeekStatus @default(DRAFT)
+  publishedAt     DateTime?
+  lockedAt        DateTime?
+  createdByUserId String?
+  tenant          Tenant             @relation(fields: [tenantId], references: [id])
+  createdBy       User?              @relation("ScheduleCreatedBy", fields: [createdByUserId], references: [id])
+  shifts          Shift[]
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+
+  @@unique([tenantId, weekStartDate])
+  @@index([tenantId])
+  @@index([weekStartDate])
+}
+
+model Shift {
+  id             String            @id @default(cuid())
+  scheduleWeekId String
+  tenantId       String
+  date           DateTime
+  startTime      String
+  endTime        String
+  label          String?
+  note           String?
+  scheduleWeek   ScheduleWeek      @relation(fields: [scheduleWeekId], references: [id], onDelete: Cascade)
+  tenant         Tenant            @relation(fields: [tenantId], references: [id])
+  assignments    ShiftAssignment[]
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+
+  @@index([scheduleWeekId])
+  @@index([tenantId])
+  @@index([date])
+}
+
+model ShiftAssignment {
+  id        String   @id @default(cuid())
+  shiftId   String
+  userId    String
+  tenantId  String
+  shift     Shift    @relation(fields: [shiftId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id])
+  tenant    Tenant   @relation(fields: [tenantId], references: [id])
+  createdAt DateTime @default(now())
+
+  @@unique([shiftId, userId])
+  @@index([userId])
+  @@index([tenantId])
+}
