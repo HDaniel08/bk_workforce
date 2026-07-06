@@ -125,7 +125,7 @@ Beallitasok:
 ```text
 Framework preset: None
 Root directory: /
-Build command: npm install -g pnpm@9.15.0 && pnpm install --frozen-lockfile && pnpm --filter @bk-workforce/web build
+Build command: pnpm install --frozen-lockfile && pnpm --filter @bk-workforce/web build
 Build output directory: apps/web/dist
 ```
 
