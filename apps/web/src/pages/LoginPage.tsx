@@ -45,7 +45,7 @@ export function LoginPage() {
   return (
     <AuthCard
       title="Bejelentkezés"
-      subtitle="Tenant felhasznaloknak, managereknek es dolgozóknak."
+      subtitle=""
       submitLabel="Belépés"
       email={email}
       password={password}
