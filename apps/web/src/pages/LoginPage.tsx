@@ -8,10 +8,10 @@ import { getDashboardPath } from "../utils/auth-redirect";
 
 function getLoginErrorMessage(error: unknown) {
   if (isAxiosError(error) && error.response?.data?.message === "INACTIVE_USER") {
-    return "InaktÃ­v felhasznÃ¡lÃ³";
+    return "Inaktív felhasználó";
   }
 
-  return "HibÃ¡s email vagy jelszÃ³";
+  return "Hibás email vagy jelszó";
 }
 
 export function LoginPage() {

@@ -35,7 +35,7 @@ export function ChangePasswordPage() {
         navigate(getDashboardPath(user), { replace: true });
       }
     } catch {
-      setError("JelszÃ³csere hiba");
+      setError("Jelszócsere hiba");
     } finally {
       setIsSubmitting(false);
     }
