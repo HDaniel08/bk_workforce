@@ -1,4 +1,6 @@
-﻿interface AuthCardProps {
+import { Link } from "react-router-dom";
+
+interface AuthCardProps {
   title: string;
   subtitle: string;
   submitLabel: string;
@@ -56,7 +58,7 @@ export function AuthCard({
           />
 
           <label className="mt-4 block text-sm font-semibold" htmlFor="password">
-            Jelszó
+            Jelszo
           </label>
           <input
             className="mt-2 w-full rounded-md border border-brown/20 bg-cream/40 px-3 py-3 outline-none transition focus:border-red focus:ring-2 focus:ring-red/20"
@@ -69,13 +71,12 @@ export function AuthCard({
             onChange={(event) => onPasswordChange(event.target.value)}
           />
 
-          <a
+          <Link
             className="mt-3 inline-block text-sm font-semibold text-red hover:text-brown"
-            href="#forgot-password"
-            onClick={(event) => event.preventDefault()}
+            to="/forgot-password"
           >
-            Elfelejtett jelszó
-          </a>
+            Elfelejtett jelszo
+          </Link>
 
           {error ? (
             <p className="mt-4 rounded-md border border-red/20 bg-red/10 px-3 py-2 text-sm font-semibold text-red">
@@ -88,11 +89,10 @@ export function AuthCard({
             type="submit"
             disabled={isSubmitting}
           >
-            {isSubmitting ? "Bejelentkezés..." : submitLabel}
+            {isSubmitting ? "Bejelentkezes..." : submitLabel}
           </button>
         </form>
       </div>
     </section>
   );
 }
-

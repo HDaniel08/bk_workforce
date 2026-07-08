@@ -15,7 +15,8 @@ const managerItems = [
   { to: "/manager/manager-availability", label: "Manager ráérés" },
   { to: "/manager/my-availability", label: "Saját ráérés" },
   { to: "/manager/vacation-requests", label: "Szabadságkérelmek" },
-  { to: "/manager/my-vacation-requests", label: "Saját szabadság" }
+  { to: "/manager/my-vacation-requests", label: "Saját szabadság" },
+  { to: "/manager/test-email", label: "Teszt email" }
 ];
 
 const workerItems = [

@@ -1,7 +1,9 @@
-import { Injectable } from "@nestjs/common";
+import { Injectable, UnauthorizedException } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { PassportStrategy } from "@nestjs/passport";
 import { ExtractJwt, Strategy } from "passport-jwt";
+import { PrismaService } from "../../prisma/prisma.service";
+import { getJwtSecret } from "../auth.config";
 import type { AuthUser } from "../types/auth-user.type";
 
 interface JwtPayload {
@@ -14,21 +16,47 @@ interface JwtPayload {
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
-  constructor(configService: ConfigService) {
+  constructor(
+    configService: ConfigService,
+    private readonly prisma: PrismaService
+  ) {
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
       ignoreExpiration: false,
-      secretOrKey: configService.get<string>("JWT_SECRET", "change-me")
+      secretOrKey: getJwtSecret(configService)
     });
   }
 
-  validate(payload: JwtPayload): AuthUser {
+  async validate(payload: JwtPayload): Promise<AuthUser> {
+    const user = await this.prisma.user.findUnique({
+      where: { id: payload.sub },
+      select: {
+        id: true,
+        tenantId: true,
+        role: true,
+        employeeSubRole: true,
+        workerType: true,
+        isActive: true
+      }
+    });
+
+    if (
+      !user ||
+      !user.isActive ||
+      user.tenantId !== payload.tenantId ||
+      user.role !== payload.role ||
+      user.employeeSubRole !== payload.employeeSubRole ||
+      user.workerType !== payload.workerType
+    ) {
+      throw new UnauthorizedException("INVALID_TOKEN");
+    }
+
     return {
-      id: payload.sub,
-      tenantId: payload.tenantId,
-      role: payload.role,
-      employeeSubRole: payload.employeeSubRole,
-      workerType: payload.workerType
+      id: user.id,
+      tenantId: user.tenantId,
+      role: user.role,
+      employeeSubRole: user.employeeSubRole,
+      workerType: user.workerType
     };
   }
 }

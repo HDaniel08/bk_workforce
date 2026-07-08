@@ -30,3 +30,20 @@ export async function changePassword(
 
   return response.data;
 }
+
+export async function forgotPassword(email: string) {
+  const response = await api.post<{ success: true }>("/auth/forgot-password", {
+    email
+  });
+
+  return response.data;
+}
+
+export async function resetPassword(token: string, newPassword: string) {
+  const response = await api.post<{ success: true }>("/auth/reset-password", {
+    token,
+    newPassword
+  });
+
+  return response.data;
+}

@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
 import { EmployeeSubRole, UserRole } from "@prisma/client";
 import * as bcrypt from "bcrypt";
+import { randomBytes } from "crypto";
 import { PrismaService } from "../prisma/prisma.service";
 import type { AuthUser } from "../auth/types/auth-user.type";
 import { MailService } from "../mail/mail.service";
@@ -164,7 +165,7 @@ export class TenantsService {
   }
 
   private generateTemporaryPassword() {
-    return `Temp${Math.random().toString(36).slice(2, 10)}!1`;
+    return `Temp${randomBytes(9).toString("base64url")}!1`;
   }
 
   private splitName(name: string) {

@@ -6,10 +6,28 @@ import { AppModule } from "./app.module";
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   const configService = app.get(ConfigService);
-  const appUrl = configService.get<string>("APP_URL");
+  const appUrls = (configService.get<string>("APP_URL") ?? "")
+    .split(",")
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+  const isProduction = configService.get<string>("NODE_ENV") === "production";
+
+  if (isProduction && appUrls.length === 0) {
+    throw new Error("APP_URL must be configured in production");
+  }
 
   app.enableCors({
-    origin: appUrl || true,
+    origin:
+      appUrls.length > 0
+        ? (origin, callback) => {
+            if (!origin || appUrls.includes(origin)) {
+              callback(null, true);
+              return;
+            }
+
+            callback(new Error("CORS_ORIGIN_DENIED"));
+          }
+        : true,
     credentials: true
   });
 

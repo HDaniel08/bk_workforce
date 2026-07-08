@@ -4,12 +4,14 @@ import { createBrowserRouter, Navigate, RouterProvider } from "react-router-dom"
 import { AppLayout } from "./components/layout/AppLayout";
 import { ChangePasswordPage } from "./pages/ChangePasswordPage";
 import { DashboardPage } from "./pages/DashboardPage";
+import { ForgotPasswordPage } from "./pages/ForgotPasswordPage";
 import { LoginPage } from "./pages/LoginPage";
 import { ManagerDashboardPage } from "./pages/ManagerDashboardPage";
 import { ManagerManagersAvailabilityPage } from "./pages/ManagerManagersAvailabilityPage";
 import { ManagerMyAvailabilityPage } from "./pages/ManagerMyAvailabilityPage";
 import { ManagerSchedulesPage } from "./pages/ManagerSchedulesPage";
 import { ManagerTeamAvailabilityPage } from "./pages/ManagerTeamAvailabilityPage";
+import { ManagerTestEmailPage } from "./pages/ManagerTestEmailPage";
 import { ManagerUsersPage } from "./pages/ManagerUsersPage";
 import { ManagerVacationRequestsPage } from "./pages/ManagerVacationRequestsPage";
 import { MyVacationRequestsPage } from "./pages/MyVacationRequestsPage";
@@ -19,6 +21,7 @@ import { SuperadminDashboardPage } from "./pages/SuperadminDashboardPage";
 import { SuperAdminLoginPage } from "./pages/SuperAdminLoginPage";
 import { SuperadminTenantsPage } from "./pages/SuperadminTenantsPage";
 import { SuperadminVacationRequestsPage } from "./pages/SuperadminVacationRequestsPage";
+import { ResetPasswordPage } from "./pages/ResetPasswordPage";
 import { WorkerAvailabilityPage } from "./pages/WorkerAvailabilityPage";
 import { ChangePasswordRoute } from "./routes/ChangePasswordRoute";
 import { ProtectedRoute } from "./routes/ProtectedRoute";
@@ -44,6 +47,8 @@ const router = createBrowserRouter([
   { path: "/", element: <RootRedirect /> },
   { path: "/login", element: <LoginPage /> },
   { path: "/superadmin/login", element: <SuperAdminLoginPage /> },
+  { path: "/forgot-password", element: <ForgotPasswordPage /> },
+  { path: "/reset-password", element: <ResetPasswordPage /> },
   {
     element: <ChangePasswordRoute />,
     children: [{ path: "/change-password", element: <ChangePasswordPage /> }]
@@ -110,6 +115,10 @@ const router = createBrowserRouter([
           {
             path: "/manager/my-vacation-requests",
             element: <MyVacationRequestsPage />
+          },
+          {
+            path: "/manager/test-email",
+            element: <ManagerTestEmailPage />
           }
         ]
       },

@@ -11,13 +11,20 @@ import type {
   WorkerType
 } from "@prisma/client";
 import * as bcrypt from "bcrypt";
+import { createHash, randomBytes } from "crypto";
+import { MailService } from "../mail/mail.service";
 import { PrismaService } from "../prisma/prisma.service";
 import type { ChangePasswordDto } from "./dto/change-password.dto";
+import type { ForgotPasswordDto } from "./dto/forgot-password.dto";
 import type { LoginDto } from "./dto/login.dto";
+import type { ResetPasswordDto } from "./dto/reset-password.dto";
+import { LoginRateLimiterService } from "./login-rate-limiter.service";
 
 type UserWithTenant = User & {
   tenant: { name: string; slug: string } | null;
 };
+
+const PASSWORD_RESET_TOKEN_TTL_MS = 30 * 60 * 1000;
 
 interface JwtPayload {
   sub: string;
@@ -31,7 +38,9 @@ interface JwtPayload {
 export class AuthService {
   constructor(
     private readonly prisma: PrismaService,
-    private readonly jwtService: JwtService
+    private readonly jwtService: JwtService,
+    private readonly loginRateLimiter: LoginRateLimiterService,
+    private readonly mailService: MailService
   ) {}
 
   loginEmployee(loginDto: LoginDto) {
@@ -79,9 +88,101 @@ export class AuthService {
     return { success: true };
   }
 
-  private async login(loginDto: LoginDto, expectedRole: UserRole) {
+  async forgotPassword(forgotPasswordDto: ForgotPasswordDto) {
+    const email = forgotPasswordDto.email.toLowerCase();
     const user = await this.prisma.user.findUnique({
-      where: { email: loginDto.email.toLowerCase() },
+      where: { email }
+    });
+
+    if (!user || !user.isActive) {
+      return { success: true };
+    }
+
+    const token = this.generatePasswordResetToken();
+    const tokenHash = this.hashPasswordResetToken(token);
+    const now = new Date();
+
+    await this.prisma.$transaction([
+      this.prisma.passwordResetToken.updateMany({
+        where: {
+          userId: user.id,
+          usedAt: null
+        },
+        data: {
+          usedAt: now
+        }
+      }),
+      this.prisma.passwordResetToken.create({
+        data: {
+          userId: user.id,
+          tokenHash,
+          expiresAt: new Date(now.getTime() + PASSWORD_RESET_TOKEN_TTL_MS)
+        }
+      })
+    ]);
+
+    await this.mailService.sendPasswordResetEmail({
+      to: user.email,
+      firstName: user.firstName,
+      resetUrl: this.mailService.getPasswordResetUrl(token)
+    });
+
+    await this.createAuditLog(user, "AUTH_PASSWORD_RESET_REQUESTED");
+
+    return { success: true };
+  }
+
+  async resetPassword(resetPasswordDto: ResetPasswordDto) {
+    const tokenHash = this.hashPasswordResetToken(resetPasswordDto.token);
+    const resetToken = await this.prisma.passwordResetToken.findUnique({
+      where: { tokenHash },
+      include: { user: true }
+    });
+
+    if (
+      !resetToken ||
+      resetToken.usedAt ||
+      resetToken.expiresAt <= new Date() ||
+      !resetToken.user.isActive
+    ) {
+      throw new UnauthorizedException("INVALID_PASSWORD_RESET_TOKEN");
+    }
+
+    const passwordHash = await bcrypt.hash(resetPasswordDto.newPassword, 10);
+    const now = new Date();
+
+    await this.prisma.$transaction([
+      this.prisma.user.update({
+        where: { id: resetToken.userId },
+        data: {
+          passwordHash,
+          mustChangePassword: false
+        }
+      }),
+      this.prisma.passwordResetToken.updateMany({
+        where: {
+          userId: resetToken.userId,
+          usedAt: null
+        },
+        data: {
+          usedAt: now
+        }
+      })
+    ]);
+
+    await this.createAuditLog(resetToken.user, "AUTH_PASSWORD_RESET_COMPLETED");
+
+    return { success: true };
+  }
+
+  private async login(loginDto: LoginDto, expectedRole: UserRole) {
+    const email = loginDto.email.toLowerCase();
+    const rateLimitKey = `${expectedRole}:${email}`;
+
+    this.loginRateLimiter.assertCanAttempt(rateLimitKey);
+
+    const user = await this.prisma.user.findUnique({
+      where: { email },
       include: {
         tenant: {
           select: {
@@ -93,15 +194,15 @@ export class AuthService {
     });
 
     if (!user || user.role !== expectedRole) {
-      throw new UnauthorizedException("INVALID_CREDENTIALS");
+      this.rejectInvalidCredentials(rateLimitKey);
     }
 
     if (expectedRole === "EMPLOYEE" && !user.tenantId) {
-      throw new UnauthorizedException("INVALID_CREDENTIALS");
+      this.rejectInvalidCredentials(rateLimitKey);
     }
 
     if (expectedRole === "ADMIN" && user.tenantId) {
-      throw new UnauthorizedException("INVALID_CREDENTIALS");
+      this.rejectInvalidCredentials(rateLimitKey);
     }
 
     if (!user.isActive) {
@@ -114,8 +215,10 @@ export class AuthService {
     );
 
     if (!isPasswordValid) {
-      throw new UnauthorizedException("INVALID_CREDENTIALS");
+      this.rejectInvalidCredentials(rateLimitKey);
     }
+
+    this.loginRateLimiter.reset(rateLimitKey);
 
     await this.prisma.user.update({
       where: { id: user.id },
@@ -171,5 +274,18 @@ export class AuthService {
         tenantId: user.tenantId
       }
     });
+  }
+
+  private rejectInvalidCredentials(rateLimitKey: string): never {
+    this.loginRateLimiter.recordFailure(rateLimitKey);
+    throw new UnauthorizedException("INVALID_CREDENTIALS");
+  }
+
+  private generatePasswordResetToken() {
+    return randomBytes(32).toString("base64url");
+  }
+
+  private hashPasswordResetToken(token: string) {
+    return createHash("sha256").update(token).digest("hex");
   }
 }

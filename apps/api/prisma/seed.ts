@@ -36,7 +36,7 @@ async function main() {
       employeeSubRole: null,
       workerType: null,
       contractHours: null,
-      mustChangePassword: false,
+      mustChangePassword: true,
       isActive: true
     },
     create: {
@@ -45,7 +45,7 @@ async function main() {
       firstName: "Global",
       lastName: "Admin",
       role: "ADMIN",
-      mustChangePassword: false
+      mustChangePassword: true
     }
   });
 
