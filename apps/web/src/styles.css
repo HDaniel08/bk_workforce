@@ -95,6 +95,17 @@ input {
     position: static;
   }
 
+  .availability-print-table .availability-print-info-column {
+    display: table-cell;
+    width: 18mm;
+    min-width: 18mm;
+    max-width: 18mm;
+    padding: 2mm 1mm;
+    font-size: 9px;
+    line-height: 1.15;
+    white-space: normal;
+  }
+
   .availability-print-table button {
     min-height: 0;
     width: 100%;

@@ -113,6 +113,12 @@ const workerGroups: WorkerGroup[] = [
   }
 ];
 
+const printInfoColumns = [
+  "Vasárnapi pihenőnap",
+  "Időegyenleg",
+  "Előző heti beo"
+];
+
 function sortByName(users: TeamUser[]) {
   return [...users].sort((left, right) => {
     const leftName = `${left.lastName} ${left.firstName}`;
@@ -161,6 +167,7 @@ export function ManagerTeamAvailabilityPage() {
   const days = getWeekDates(team?.period.startDate ?? weekStartDate);
   const groupedUsers = getGroupedUsers(team?.users ?? []);
   const isSubmissionClosed = submissionWeek?.status === "CLOSED";
+  const printColumnCount = days.length + printInfoColumns.length + 1;
 
   function openDayEditor(user: TeamUser, date: string) {
     const existingDay = user.availability.days.find((item) => item.date === date);
@@ -284,6 +291,14 @@ export function ManagerTeamAvailabilityPage() {
                 <th className="sticky left-0 z-10 w-56 bg-brown px-3 py-3 text-left">
                   Dolgozó
                 </th>
+                {printInfoColumns.map((column) => (
+                  <th
+                    key={column}
+                    className="availability-print-info-column hidden border-l border-cream/20 px-1 py-2 text-center"
+                  >
+                    {column}
+                  </th>
+                ))}
                 {days.map((day) => (
                   <th key={day} className="min-w-24 border-l border-cream/20 px-2 py-2 text-center">
                     <span className="block capitalize">{formatDayName(day)}</span>
@@ -299,13 +314,19 @@ export function ManagerTeamAvailabilityPage() {
                 <Fragment key={group.key}>
                   {groupIndex > 0 ? (
                     <tr key={`${group.key}-spacer`} aria-hidden="true">
-                      <td className="h-4 bg-cream/60" colSpan={days.length + 1} />
+                      <td className="h-4 bg-cream/60" colSpan={printColumnCount} />
                     </tr>
                   ) : null}
                   <tr key={`${group.key}-heading`} className="border-t border-brown/10 bg-cream/80">
                     <th className="sticky left-0 z-10 bg-cream px-3 py-2 text-left text-xs uppercase text-brown/70">
                       {group.title}
                     </th>
+                    {printInfoColumns.map((column) => (
+                      <td
+                        key={`${group.key}-${column}`}
+                        className="availability-print-info-column hidden px-1 py-2"
+                      />
+                    ))}
                     <td className="px-3 py-2 text-xs font-semibold text-brown/60" colSpan={days.length}>
                       {group.users.length} dolgozó
                     </td>
@@ -317,6 +338,12 @@ export function ManagerTeamAvailabilityPage() {
                           {user.firstName} {user.lastName}
                         </div>
                       </th>
+                      {printInfoColumns.map((column) => (
+                        <td
+                          key={`${user.id}-${column}`}
+                          className="availability-print-info-column hidden px-1 py-2"
+                        />
+                      ))}
                       {days.map((headerDay) => {
                         const day = user.availability.days.find(
                           (item) => item.date === headerDay
