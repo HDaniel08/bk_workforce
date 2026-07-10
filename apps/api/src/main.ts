@@ -3,6 +3,14 @@ import { ConfigService } from "@nestjs/config";
 import { NestFactory } from "@nestjs/core";
 import { AppModule } from "./app.module";
 
+function normalizeOrigin(origin: string) {
+  try {
+    return new URL(origin).origin;
+  } catch {
+    return origin.replace(/\/+$/, "");
+  }
+}
+
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   const configService = app.get(ConfigService);
@@ -10,17 +18,18 @@ async function bootstrap() {
     .split(",")
     .map((origin) => origin.trim())
     .filter(Boolean);
+  const allowedOrigins = appUrls.map(normalizeOrigin);
   const isProduction = configService.get<string>("NODE_ENV") === "production";
 
-  if (isProduction && appUrls.length === 0) {
+  if (isProduction && allowedOrigins.length === 0) {
     throw new Error("APP_URL must be configured in production");
   }
 
   app.enableCors({
     origin:
-      appUrls.length > 0
+      allowedOrigins.length > 0
         ? (origin, callback) => {
-            if (!origin || appUrls.includes(origin)) {
+            if (!origin || allowedOrigins.includes(normalizeOrigin(origin))) {
               callback(null, true);
               return;
             }

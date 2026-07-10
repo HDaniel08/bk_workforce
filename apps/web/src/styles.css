@@ -20,3 +20,87 @@ button,
 input {
   font: inherit;
 }
+
+@media print {
+  @page {
+    margin: 12mm;
+    size: landscape;
+  }
+
+  :root,
+  body {
+    background: #ffffff;
+    color: #111111;
+  }
+
+  body * {
+    visibility: hidden;
+  }
+
+  .availability-print-area,
+  .availability-print-area * {
+    visibility: visible;
+  }
+
+  .availability-print-area {
+    position: absolute;
+    inset: 0 auto auto 0;
+    width: 100%;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: #ffffff;
+    box-shadow: none;
+  }
+
+  .availability-print-area .overflow-x-auto {
+    overflow: visible;
+  }
+
+  .availability-print-heading {
+    display: block;
+    margin-bottom: 16px;
+  }
+
+  .availability-print-heading h1 {
+    margin: 0 0 4px;
+    font-size: 20px;
+    font-weight: 700;
+  }
+
+  .availability-print-heading p {
+    margin: 4px 0 0;
+    font-size: 12px;
+  }
+
+  .availability-print-table th,
+  .availability-print-table td {
+    border: 1px solid #bbbbbb;
+    color: #111111;
+  }
+
+  .availability-print-table thead tr,
+  .availability-print-table thead th,
+  .availability-print-table tbody tr,
+  .availability-print-table tbody th,
+  .availability-print-table tbody td,
+  .availability-print-table button {
+    background: #ffffff;
+    box-shadow: none;
+  }
+
+  .availability-print-table th,
+  .availability-print-table td,
+  .availability-print-table button {
+    position: static;
+  }
+
+  .availability-print-table button {
+    min-height: 0;
+    width: 100%;
+    padding: 2mm;
+    border-radius: 0;
+    color: #111111;
+    text-align: center;
+  }
+}

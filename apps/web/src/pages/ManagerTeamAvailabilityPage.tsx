@@ -30,6 +30,14 @@ function formatDate(date: string) {
   }).format(new Date(`${date}T00:00:00`));
 }
 
+function formatFullDate(date: string) {
+  return new Intl.DateTimeFormat("hu-HU", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit"
+  }).format(new Date(`${date}T00:00:00`));
+}
+
 function getCellStyle(day?: AvailabilityDay) {
   if (!day) {
     return {
@@ -152,6 +160,7 @@ export function ManagerTeamAvailabilityPage() {
 
   const days = getWeekDates(team?.period.startDate ?? weekStartDate);
   const groupedUsers = getGroupedUsers(team?.users ?? []);
+  const isSubmissionClosed = submissionWeek?.status === "CLOSED";
 
   function openDayEditor(user: TeamUser, date: string) {
     const existingDay = user.availability.days.find((item) => item.date === date);
@@ -202,17 +211,25 @@ export function ManagerTeamAvailabilityPage() {
     }
   }
 
+  function printClosedAvailability() {
+    if (!isSubmissionClosed) {
+      return;
+    }
+
+    window.print();
+  }
+
   return (
     <section className="space-y-5">
-      <div>
+      <div className="print:hidden">
         <h2 className="text-2xl font-bold">Csapat ráérések</h2>
         <p className="mt-1 text-sm text-brown/70">
           Heti, táblázatos áttekintés a dolgozók ráéréséről.
         </p>
       </div>
 
-      <Card className="space-y-4">
-        <div className="grid gap-3 md:grid-cols-[1fr_auto_auto] md:items-end">
+      <Card className="space-y-4 print:hidden">
+        <div className="grid gap-3 md:grid-cols-[1fr_auto_auto_auto] md:items-end">
           <Input
             label="Hét kezdete"
             type="date"
@@ -236,15 +253,32 @@ export function ManagerTeamAvailabilityPage() {
           >
             Hét lezárása
           </Button>
+          <Button
+            variant="ghost"
+            disabled={!isSubmissionClosed}
+            onClick={printClosedAvailability}
+          >
+            Nyomtatás / PDF
+          </Button>
         </div>
         <p className="text-sm font-semibold text-brown/70">
           Állapot: {submissionWeekStatusLabel(submissionWeek?.status ?? null)}
         </p>
       </Card>
 
-      <Card className="overflow-hidden p-0">
+      <Card className="availability-print-area overflow-hidden p-0 print:overflow-visible print:rounded-none print:border-0 print:bg-white print:p-0 print:shadow-none">
+        <div className="availability-print-heading hidden">
+          <h1>Csapat ráérések</h1>
+          <p>
+            {formatFullDate(days[0] ?? weekStartDate)} -{" "}
+            {formatFullDate(days[days.length - 1] ?? weekStartDate)}
+          </p>
+          <p>
+            Állapot: {submissionWeekStatusLabel(submissionWeek?.status ?? null)}
+          </p>
+        </div>
         <div className="overflow-x-auto">
-          <table className="mx-auto min-w-[820px] border-collapse text-sm">
+          <table className="availability-print-table mx-auto min-w-[820px] border-collapse text-sm print:w-full print:min-w-0 print:text-xs">
             <thead>
               <tr className="bg-brown text-cream">
                 <th className="sticky left-0 z-10 w-56 bg-brown px-3 py-3 text-left">
