@@ -30,6 +30,12 @@ export class AvailabilityController {
     return this.availabilityService.getOpenSubmissionWeeks(user);
   }
 
+  @Get("closed-submission-weeks")
+  @Roles(EmployeeSubRole.MANAGER)
+  getClosedSubmissionWeeks(@CurrentUser() user: AuthUser) {
+    return this.availabilityService.getClosedSubmissionWeeks(user);
+  }
+
   @Post("me/save-draft")
   @Roles(UserRole.EMPLOYEE)
   saveDraft(@CurrentUser() user: AuthUser, @Body() dto: SaveAvailabilityDto) {

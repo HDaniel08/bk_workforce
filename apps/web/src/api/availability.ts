@@ -81,6 +81,13 @@ export async function getOpenAvailabilitySubmissionWeeks() {
   return response.data;
 }
 
+export async function getClosedAvailabilitySubmissionWeeks() {
+  const response = await api.get<AvailabilitySubmissionWeek[]>(
+    "/availability/closed-submission-weeks"
+  );
+  return response.data;
+}
+
 export async function saveMyAvailabilityDraft(payload: AvailabilityPayload) {
   const response = await api.post<MyAvailabilityResponse>(
     "/availability/me/save-draft",

@@ -59,24 +59,27 @@ input {
 
   .availability-print-heading {
     display: block;
-    margin-bottom: 16px;
+    margin-bottom: 8px;
   }
 
   .availability-print-heading h1 {
     margin: 0 0 4px;
-    font-size: 20px;
+    font-size: 16px;
     font-weight: 700;
   }
 
   .availability-print-heading p {
-    margin: 4px 0 0;
-    font-size: 12px;
+    margin: 2px 0 0;
+    font-size: 10px;
   }
 
   .availability-print-table th,
   .availability-print-table td {
     border: 1px solid #bbbbbb;
     color: #111111;
+    padding: 0.7mm 1mm;
+    font-size: 8px;
+    line-height: 1;
   }
 
   .availability-print-table thead tr,
@@ -97,21 +100,48 @@ input {
 
   .availability-print-table .availability-print-info-column {
     display: table-cell;
-    width: 18mm;
-    min-width: 18mm;
-    max-width: 18mm;
-    padding: 2mm 1mm;
-    font-size: 9px;
-    line-height: 1.15;
+    width: 11mm;
+    min-width: 11mm;
+    max-width: 11mm;
+    padding: 0.6mm 0.5mm;
+    font-size: 7px;
+    line-height: 1;
     white-space: normal;
+  }
+
+  .availability-print-table tbody th {
+    width: 34mm;
+    min-width: 34mm;
+    max-width: 34mm;
+    padding: 0.7mm 1mm;
+    font-size: 8px;
+    line-height: 1;
+    white-space: nowrap;
+  }
+
+  .availability-print-table .availability-print-group-heading {
+    display: none;
+  }
+
+  .availability-print-table .availability-print-group-spacer {
+    height: 3mm;
+    padding: 0;
+    border-right-color: transparent;
+    border-left-color: transparent;
   }
 
   .availability-print-table button {
     min-height: 0;
     width: 100%;
-    padding: 2mm;
+    padding: 0;
     border-radius: 0;
     color: #111111;
+    font-size: 8px;
+    line-height: 1;
     text-align: center;
+  }
+
+  .availability-print-table button span + span {
+    display: none;
   }
 }

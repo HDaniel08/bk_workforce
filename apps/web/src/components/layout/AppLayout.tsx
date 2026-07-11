@@ -12,6 +12,7 @@ const managerItems = [
   { to: "/manager", label: "Dashboard" },
   { to: "/manager/users", label: "Dolgozók" },
   { to: "/manager/availability", label: "Csapat ráérés" },
+  { to: "/manager/schedule-writing", label: "Beosztásírás" },
   { to: "/manager/manager-availability", label: "Manager ráérés" },
   { to: "/manager/my-availability", label: "Saját ráérés" },
   { to: "/manager/vacation-requests", label: "Szabadságkérelmek" },

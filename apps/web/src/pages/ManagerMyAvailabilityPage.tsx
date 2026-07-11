@@ -130,7 +130,45 @@ export function ManagerMyAvailabilityPage() {
             <div className="border-b border-brown/10 bg-cream/80 px-3 py-2">
               <h3 className="text-sm font-bold">{weekIndex + 1}. hét</h3>
             </div>
-            <div className="overflow-x-auto">
+            <div className="divide-y divide-brown/10 sm:hidden">
+              {week.map((date, dayIndex) => {
+                if (!date) {
+                  return null;
+                }
+
+                const day = days.find((item) => item.date === date);
+                const style = getCellStyle(day);
+                return (
+                  <div key={`${date}-${dayIndex}`} className="flex items-center gap-3 p-3">
+                    <div className="w-20 shrink-0">
+                      <span className="block text-sm font-bold capitalize">
+                        {formatDayName(date)}
+                      </span>
+                      <span className="block text-xs text-brown/65">{formatDate(date)}</span>
+                    </div>
+                    <button
+                      className={`min-h-11 flex-1 rounded-md px-3 py-2 text-center text-xs font-bold leading-tight transition hover:ring-2 hover:ring-red/30 ${style.className}`}
+                      type="button"
+                      onClick={() =>
+                        day &&
+                        setEditingDay({
+                          ...day,
+                          type: day.type === "VACATION" ? "OFF" : day.type
+                        })
+                      }
+                    >
+                      <span>{style.label}</span>
+                      {day?.note ? (
+                        <span className="mt-1 block text-xs font-normal opacity-75">
+                          {day.note}
+                        </span>
+                      ) : null}
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+            <div className="hidden overflow-x-auto sm:block">
               <table className="min-w-[820px] border-collapse text-sm">
                 <thead>
                   <tr className="bg-brown text-cream">

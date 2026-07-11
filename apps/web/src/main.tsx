@@ -9,6 +9,7 @@ import { LoginPage } from "./pages/LoginPage";
 import { ManagerDashboardPage } from "./pages/ManagerDashboardPage";
 import { ManagerManagersAvailabilityPage } from "./pages/ManagerManagersAvailabilityPage";
 import { ManagerMyAvailabilityPage } from "./pages/ManagerMyAvailabilityPage";
+import { ManagerScheduleWritingPage } from "./pages/ManagerScheduleWritingPage";
 import { ManagerSchedulesPage } from "./pages/ManagerSchedulesPage";
 import { ManagerTeamAvailabilityPage } from "./pages/ManagerTeamAvailabilityPage";
 import { ManagerTestEmailPage } from "./pages/ManagerTestEmailPage";
@@ -91,6 +92,10 @@ const router = createBrowserRouter([
           {
             path: "/manager/schedules",
             element: <ManagerSchedulesPage />
+          },
+          {
+            path: "/manager/schedule-writing",
+            element: <ManagerScheduleWritingPage />
           },
           {
             path: "/manager/schedule",

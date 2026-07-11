@@ -88,6 +88,24 @@ export class AvailabilityService {
     }));
   }
 
+  async getClosedSubmissionWeeks(actor: AuthUser) {
+    const tenantId = this.requireManagerTenant(actor);
+    const weeks = await this.prisma.availabilitySubmissionWeek.findMany({
+      where: {
+        tenantId,
+        status: AvailabilitySubmissionStatus.CLOSED
+      },
+      orderBy: { weekStartDate: "desc" }
+    });
+
+    return weeks.map((week) => ({
+      weekStartDate: toDateOnly(week.weekStartDate),
+      status: week.status,
+      openedAt: week.openedAt,
+      closedAt: week.closedAt
+    }));
+  }
+
   async saveMe(user: AuthUser, dto: SaveAvailabilityDto, submit: boolean) {
     if (!user.tenantId) {
       throw new ForbiddenException("TENANT_REQUIRED");

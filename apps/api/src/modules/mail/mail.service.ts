@@ -1,6 +1,8 @@
 import { Injectable } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 
+const EMAIL_APP_URL = "https://bk-workforce.com";
+
 interface WelcomeEmailParams {
   to: string;
   firstName: string;
@@ -53,13 +55,11 @@ export class MailService {
   constructor(private readonly configService: ConfigService) {}
 
   getLoginUrl() {
-    const appUrl = this.configService.get<string>("APP_URL", "http://localhost:5173");
-    return `${appUrl.replace(/\/$/, "")}/login`;
+    return `${EMAIL_APP_URL}/login`;
   }
 
   getPasswordResetUrl(token: string) {
-    const appUrl = this.configService.get<string>("APP_URL", "http://localhost:5173");
-    return `${appUrl.replace(/\/$/, "")}/reset-password?token=${encodeURIComponent(token)}`;
+    return `${EMAIL_APP_URL}/reset-password?token=${encodeURIComponent(token)}`;
   }
 
   sendWelcomeEmail(params: WelcomeEmailParams) {

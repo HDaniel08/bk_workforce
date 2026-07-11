@@ -113,11 +113,7 @@ const workerGroups: WorkerGroup[] = [
   }
 ];
 
-const printInfoColumns = [
-  "Vasárnapi pihenőnap",
-  "Időegyenleg",
-  "Előző heti beo"
-];
+const printInfoColumns = ["Vas.", "Egy.", "Előző"];
 
 function sortByName(users: TeamUser[]) {
   return [...users].sort((left, right) => {
@@ -314,10 +310,16 @@ export function ManagerTeamAvailabilityPage() {
                 <Fragment key={group.key}>
                   {groupIndex > 0 ? (
                     <tr key={`${group.key}-spacer`} aria-hidden="true">
-                      <td className="h-4 bg-cream/60" colSpan={printColumnCount} />
+                      <td
+                        className="availability-print-group-spacer h-4 bg-cream/60"
+                        colSpan={printColumnCount}
+                      />
                     </tr>
                   ) : null}
-                  <tr key={`${group.key}-heading`} className="border-t border-brown/10 bg-cream/80">
+                  <tr
+                    key={`${group.key}-heading`}
+                    className="availability-print-group-heading border-t border-brown/10 bg-cream/80"
+                  >
                     <th className="sticky left-0 z-10 bg-cream px-3 py-2 text-left text-xs uppercase text-brown/70">
                       {group.title}
                     </th>

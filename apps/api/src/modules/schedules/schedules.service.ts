@@ -4,7 +4,7 @@ import {
   Injectable,
   NotFoundException
 } from "@nestjs/common";
-import { Prisma, ScheduleWeekStatus, UserRole, VacationRequestStatus } from "@prisma/client";
+import { Prisma, ScheduleWeekStatus, UserRole } from "@prisma/client";
 import type { AuthUser } from "../auth/types/auth-user.type";
 import { PrismaService } from "../prisma/prisma.service";
 import { parseDateOnly, toDateOnly, getWeekEnd, getWeekStart } from "../availability/helpers/date.helpers";
@@ -12,13 +12,7 @@ import { AssignShiftDto } from "./dto/assign-shift.dto";
 import { CreateScheduleWeekDto } from "./dto/create-schedule-week.dto";
 import { CreateShiftDto } from "./dto/create-shift.dto";
 import { UpdateShiftDto } from "./dto/update-shift.dto";
-import {
-  getShiftDurationHours,
-  getShiftStartEndDateTime,
-  hoursBetween,
-  intervalsOverlap,
-  validateShiftTimeWindow
-} from "./helpers/shift-time.helpers";
+import { validateShiftTimeWindow } from "./helpers/shift-time.helpers";
 
 @Injectable()
 export class SchedulesService {
@@ -164,9 +158,6 @@ export class SchedulesService {
       throw new BadRequestException("USER_NOT_ASSIGNABLE");
     }
 
-    await this.ensureUserNotOnApprovedVacation(user.id, shift.date);
-    await this.validateAssignmentRules(shift, user.id);
-
     const assignment = await this.prisma.shiftAssignment.create({
       data: {
         shiftId,
@@ -276,69 +267,6 @@ export class SchedulesService {
           scheduleWeekStatus: week.status
         })) ?? []
     };
-  }
-
-  private async validateAssignmentRules(
-    shift: Awaited<ReturnType<SchedulesService["getManagerDraftShift"]>>,
-    userId: string
-  ) {
-    const existingAssignments = await this.prisma.shiftAssignment.findMany({
-      where: { userId },
-      include: { shift: { include: { scheduleWeek: true } } }
-    });
-    const current = getShiftStartEndDateTime(shift.date, shift.startTime, shift.endTime);
-    let dailyHours = getShiftDurationHours(shift.date, shift.startTime, shift.endTime);
-
-    for (const assignment of existingAssignments) {
-      const other = assignment.shift;
-      const otherInterval = getShiftStartEndDateTime(other.date, other.startTime, other.endTime);
-      if (intervalsOverlap(current.start, current.end, otherInterval.start, otherInterval.end)) {
-        throw new BadRequestException("SHIFT_OVERLAP");
-      }
-      if (
-        toDateOnly(other.date) === toDateOnly(shift.date) &&
-        other.scheduleWeekId === shift.scheduleWeekId
-      ) {
-        dailyHours += getShiftDurationHours(other.date, other.startTime, other.endTime);
-      }
-      const restHours = Math.min(
-        hoursBetween(current.end, otherInterval.start),
-        hoursBetween(otherInterval.end, current.start)
-      );
-      if (restHours < 10) {
-        throw new BadRequestException("REST_TIME_TOO_SHORT");
-      }
-    }
-
-    if (dailyHours > 12) {
-      throw new BadRequestException("DAILY_HOURS_LIMIT_EXCEEDED");
-    }
-  }
-
-  private async ensureUserNotOnApprovedVacation(userId: string, date: Date) {
-    if (this.isWeekend(date)) {
-      return;
-    }
-
-    const vacation = await this.prisma.vacationRequest.findFirst({
-      where: {
-        requesterUserId: userId,
-        status: VacationRequestStatus.APPROVED,
-        startDate: { lte: date },
-        endDate: { gte: date }
-      }
-    });
-
-    if (vacation) {
-      throw new BadRequestException(
-        "A dolgozo elfogadott szabadsagon van ezen a napon."
-      );
-    }
-  }
-
-  private isWeekend(date: Date) {
-    const day = date.getUTCDay();
-    return day === 0 || day === 6;
   }
 
   private async getAccessibleWeek(actor: AuthUser, id: string) {
