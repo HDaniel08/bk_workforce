@@ -713,17 +713,31 @@ export class AvailabilityService {
       };
     }
 
+    const storedDays = availability.days.map((day) => ({
+      date: toDateOnly(day.date),
+      type: day.type,
+      workPreference: day.workPreference,
+      startTime: day.startTime,
+      endTime: day.endTime,
+      note: day.note ?? ""
+    }));
+
+    const storedDaysByDate = new Map(storedDays.map((day) => [day.date, day]));
+
     return {
       status: availability.status,
       submittedAt: availability.submittedAt,
-      days: availability.days.map((day) => ({
-        date: toDateOnly(day.date),
-        type: day.type,
-        workPreference: day.workPreference,
-        startTime: day.startTime,
-        endTime: day.endTime,
-        note: day.note ?? ""
-      }))
+      days: fillMissingDays
+        ? this.generatePeriodDates(period).map((date) => {
+            const dateOnly = toDateOnly(date);
+            return (
+              storedDaysByDate.get(dateOnly) ?? {
+                date: dateOnly,
+                ...defaultDay
+              }
+            );
+          })
+        : storedDays
     };
   }
 
