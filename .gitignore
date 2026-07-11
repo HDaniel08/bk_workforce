@@ -8,6 +8,7 @@ build
 !.env.example
 coverage
 *.log
+backups/*.dump
 *.tsbuildinfo
 .DS_Store
 apps/api/prisma/migrations/*/migration_lock.toml

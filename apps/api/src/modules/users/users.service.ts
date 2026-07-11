@@ -32,6 +32,15 @@ export class UsersService {
     return users.map((user) => this.toUserResponse(user));
   }
 
+  async findDeleted(actor: AuthUser, query: UserQueryDto) {
+    const users = await this.prisma.user.findMany({
+      where: { ...this.buildUserWhere(actor, query), isDeleted: true },
+      orderBy: { deletedAt: "desc" },
+      include: { tenant: { select: { id: true, name: true, slug: true } } }
+    });
+    return users.map((user) => this.toUserResponse(user));
+  }
+
   async findOne(actor: AuthUser, id: string) {
     const user = await this.getAccessibleUser(actor, id);
     return this.toUserResponse(user);
@@ -124,8 +133,40 @@ export class UsersService {
     return this.toUserResponse(user);
   }
 
+  async remove(actor: AuthUser, id: string) {
+    const existingUser = await this.getAccessibleUser(actor, id);
+    if (existingUser.role !== UserRole.EMPLOYEE) {
+      throw new BadRequestException("ONLY_EMPLOYEES_CAN_BE_DELETED");
+    }
+    if (existingUser.isActive) {
+      throw new BadRequestException("ACTIVE_USER_CANNOT_BE_DELETED");
+    }
+    const user = await this.prisma.user.update({
+      where: { id },
+      data: { isDeleted: true, deletedAt: new Date() },
+      include: { tenant: { select: { id: true, name: true, slug: true } } }
+    });
+    await this.createAuditLog(actor, user, "USER_DELETED", { email: user.email });
+    return this.toUserResponse(user);
+  }
+
+  async restore(actor: AuthUser, id: string) {
+    const existingUser = await this.prisma.user.findFirst({
+      where: { id, isDeleted: true },
+      include: { tenant: { select: { id: true, name: true, slug: true } } }
+    });
+    if (!existingUser) throw new NotFoundException("DELETED_USER_NOT_FOUND");
+    const user = await this.prisma.user.update({
+      where: { id },
+      data: { isDeleted: false, deletedAt: null },
+      include: { tenant: { select: { id: true, name: true, slug: true } } }
+    });
+    await this.createAuditLog(actor, user, "USER_RESTORED", { email: user.email });
+    return this.toUserResponse(user);
+  }
+
   private buildUserWhere(actor: AuthUser, query: UserQueryDto): Prisma.UserWhereInput {
-    const where: Prisma.UserWhereInput = {};
+    const where: Prisma.UserWhereInput = { isDeleted: false };
 
     if (actor.role === UserRole.ADMIN) {
       if (query.tenantId) {
@@ -165,7 +206,7 @@ export class UsersService {
       include: { tenant: { select: { id: true, name: true, slug: true } } }
     });
 
-    if (!user) {
+    if (!user || user.isDeleted) {
       throw new NotFoundException("USER_NOT_FOUND");
     }
 
@@ -243,6 +284,8 @@ export class UsersService {
     contractHours: string | null;
     mustChangePassword: boolean;
     isActive: boolean;
+    isDeleted: boolean;
+    deletedAt: Date | null;
     lastLoginAt: Date | null;
     createdAt: Date;
     updatedAt: Date;
@@ -263,6 +306,8 @@ export class UsersService {
       contractHours: user.contractHours,
       mustChangePassword: user.mustChangePassword,
       isActive: user.isActive,
+      isDeleted: user.isDeleted,
+      deletedAt: user.deletedAt,
       lastLoginAt: user.lastLoginAt,
       createdAt: user.createdAt,
       updatedAt: user.updatedAt

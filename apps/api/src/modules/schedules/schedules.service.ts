@@ -154,7 +154,7 @@ export class SchedulesService {
     const shift = await this.getManagerDraftShift(actor, shiftId);
     const user = await this.prisma.user.findUnique({ where: { id: dto.userId } });
 
-    if (!user || user.tenantId !== shift.tenantId || user.role === UserRole.ADMIN || !user.isActive) {
+    if (!user || user.tenantId !== shift.tenantId || user.role === UserRole.ADMIN || !user.isActive || user.isDeleted) {
       throw new BadRequestException("USER_NOT_ASSIGNABLE");
     }
 
@@ -375,6 +375,7 @@ export class SchedulesService {
   private shiftInclude() {
     return {
       assignments: {
+        where: { user: { isDeleted: false } },
         include: { user: this.assignmentUserSelect() }
       }
     };

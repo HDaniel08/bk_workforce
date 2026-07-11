@@ -188,7 +188,8 @@ export class VacationRequestsService {
     const where: Prisma.VacationRequestWhereInput = {
       tenantId: query.tenantId,
       requesterUserId: query.requesterUserId,
-      status: query.status
+      status: query.status,
+      requester: { isDeleted: false }
     };
 
     if (query.from || query.to) {

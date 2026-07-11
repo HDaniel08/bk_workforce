@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Post, Query, UseGuards } from "@nestjs/common";
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards } from "@nestjs/common";
 import { EmployeeSubRole, UserRole } from "@prisma/client";
 import { Roles } from "../../common/decorators/roles.decorator";
 import { RolesGuard } from "../../common/guards/roles.guard";
@@ -27,6 +27,12 @@ export class UsersController {
     return this.usersService.create(user, dto);
   }
 
+  @Get("deleted")
+  @Roles(UserRole.ADMIN)
+  findDeleted(@CurrentUser() user: AuthUser, @Query() query: UserQueryDto) {
+    return this.usersService.findDeleted(user, query);
+  }
+
   @Get(":id")
   findOne(@CurrentUser() user: AuthUser, @Param("id") id: string) {
     return this.usersService.findOne(user, id);
@@ -39,5 +45,17 @@ export class UsersController {
     @Body() dto: UpdateUserDto
   ) {
     return this.usersService.update(user, id, dto);
+  }
+
+
+  @Delete(":id")
+  remove(@CurrentUser() user: AuthUser, @Param("id") id: string) {
+    return this.usersService.remove(user, id);
+  }
+
+  @Patch(":id/restore")
+  @Roles(UserRole.ADMIN)
+  restore(@CurrentUser() user: AuthUser, @Param("id") id: string) {
+    return this.usersService.restore(user, id);
   }
 }

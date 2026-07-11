@@ -56,7 +56,7 @@ export class AuthService {
       where: { id: userId }
     });
 
-    if (!user) {
+    if (!user || user.isDeleted) {
       throw new UnauthorizedException("INVALID_CREDENTIALS");
     }
 
@@ -94,7 +94,7 @@ export class AuthService {
       where: { email }
     });
 
-    if (!user || !user.isActive) {
+    if (!user || !user.isActive || user.isDeleted) {
       return { success: true };
     }
 
@@ -143,7 +143,8 @@ export class AuthService {
       !resetToken ||
       resetToken.usedAt ||
       resetToken.expiresAt <= new Date() ||
-      !resetToken.user.isActive
+      !resetToken.user.isActive ||
+      resetToken.user.isDeleted
     ) {
       throw new UnauthorizedException("INVALID_PASSWORD_RESET_TOKEN");
     }
@@ -193,7 +194,7 @@ export class AuthService {
       }
     });
 
-    if (!user || user.role !== expectedRole) {
+    if (!user || user.isDeleted || user.role !== expectedRole) {
       this.rejectInvalidCredentials(rateLimitKey);
     }
 

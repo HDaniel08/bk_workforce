@@ -18,7 +18,7 @@ export class TenantsService {
   async findAll() {
     const tenants = await this.prisma.tenant.findMany({
       orderBy: { createdAt: "desc" },
-      include: { _count: { select: { users: true } } }
+      include: { _count: { select: { users: { where: { isDeleted: false } } } } }
     });
 
     return tenants.map(({ _count, ...tenant }) => ({
@@ -33,7 +33,7 @@ export class TenantsService {
       include: {
         _count: {
           select: {
-            users: true
+            users: { where: { isDeleted: false } }
           }
         }
       }
@@ -44,12 +44,12 @@ export class TenantsService {
     }
 
     const [activeUsers, managerUsers, workerUsers] = await Promise.all([
-      this.prisma.user.count({ where: { tenantId: id, isActive: true } }),
+      this.prisma.user.count({ where: { tenantId: id, isActive: true, isDeleted: false } }),
       this.prisma.user.count({
-        where: { tenantId: id, employeeSubRole: EmployeeSubRole.MANAGER }
+        where: { tenantId: id, employeeSubRole: EmployeeSubRole.MANAGER, isDeleted: false }
       }),
       this.prisma.user.count({
-        where: { tenantId: id, employeeSubRole: EmployeeSubRole.WORKER }
+        where: { tenantId: id, employeeSubRole: EmployeeSubRole.WORKER, isDeleted: false }
       })
     ]);
 

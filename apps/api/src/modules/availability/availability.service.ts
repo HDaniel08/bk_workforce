@@ -174,6 +174,7 @@ export class AvailabilityService {
     const where: Prisma.UserWhereInput = {
       tenantId,
       isActive: true,
+      isDeleted: false,
       role: UserRole.EMPLOYEE
     };
 
@@ -233,6 +234,7 @@ export class AvailabilityService {
         id: userId,
         tenantId,
         isActive: true,
+        isDeleted: false,
         role: UserRole.EMPLOYEE,
         employeeSubRole: targetEmployeeSubRole
       }
@@ -350,6 +352,7 @@ export class AvailabilityService {
       where: {
         tenantId: actor.tenantId,
         isActive: true,
+        isDeleted: false,
         role: UserRole.EMPLOYEE,
         employeeSubRole: EmployeeSubRole.WORKER,
         workerType: WorkerType.STUDENT,

@@ -1,5 +1,5 @@
 ﻿import { useEffect, useState } from "react";
-import { createUser, getUsers, updateUser, type ManagedUser, type UserInput } from "../api/users";
+import { createUser, deleteUser, getUsers, updateUser, type ManagedUser, type UserInput } from "../api/users";
 import { Badge } from "../components/ui/Badge";
 import { Button } from "../components/ui/Button";
 import { Card } from "../components/ui/Card";
@@ -61,6 +61,21 @@ export function ManagerUsersPage() {
       contractHours: user.contractHours ?? "HOURS_4",
       isActive: user.isActive
     });
+  }
+
+  async function handleDelete(user: ManagedUser) {
+    if (!window.confirm(`Biztosan törlöd: ${user.lastName} ${user.firstName}?`)) return;
+    setError(null);
+    try {
+      await deleteUser(user.id);
+      if (editingId === user.id) {
+        setEditingId(null);
+        setForm(emptyForm);
+      }
+      await load();
+    } catch {
+      setError("A dolgozó törlése nem sikerült");
+    }
   }
 
   return (
@@ -128,6 +143,9 @@ export function ManagerUsersPage() {
                 <Button variant="secondary" onClick={() => updateUser(user.id, { isActive: !user.isActive }).then(load)}>
                   {user.isActive ? "Inaktívalas" : "Aktívalas"}
                 </Button>
+                {!user.isActive ? (
+                  <Button variant="primary" onClick={() => handleDelete(user)}>Törlés</Button>
+                ) : null}
               </div>
             </div>
           </Card>

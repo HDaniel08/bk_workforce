@@ -36,13 +36,15 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
         role: true,
         employeeSubRole: true,
         workerType: true,
-        isActive: true
+        isActive: true,
+        isDeleted: true
       }
     });
 
     if (
       !user ||
       !user.isActive ||
+      user.isDeleted ||
       user.tenantId !== payload.tenantId ||
       user.role !== payload.role ||
       user.employeeSubRole !== payload.employeeSubRole ||

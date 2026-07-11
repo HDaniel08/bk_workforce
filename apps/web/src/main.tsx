@@ -19,6 +19,7 @@ import { MyVacationRequestsPage } from "./pages/MyVacationRequestsPage";
 import { MySchedulePage } from "./pages/MySchedulePage";
 import { SuperadminAuditLogsPage } from "./pages/SuperadminAuditLogsPage";
 import { SuperadminDashboardPage } from "./pages/SuperadminDashboardPage";
+import { SuperadminDeletedUsersPage } from "./pages/SuperadminDeletedUsersPage";
 import { SuperAdminLoginPage } from "./pages/SuperAdminLoginPage";
 import { SuperadminTenantsPage } from "./pages/SuperadminTenantsPage";
 import { SuperadminVacationRequestsPage } from "./pages/SuperadminVacationRequestsPage";
@@ -67,6 +68,10 @@ const router = createBrowserRouter([
           {
             path: "/superadmin/tenants",
             element: <SuperadminTenantsPage />
+          },
+          {
+            path: "/superadmin/deleted-users",
+            element: <SuperadminDeletedUsersPage />
           },
           {
             path: "/superadmin/audit-logs",

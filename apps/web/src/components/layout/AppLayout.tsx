@@ -7,6 +7,7 @@ import { useLocation } from "react-router-dom";
 const adminItems = [
   { to: "/superadmin", label: "Dashboard" },
   { to: "/superadmin/tenants", label: "Tenantok" },
+  { to: "/superadmin/deleted-users", label: "Törölt dolgozók" },
   { to: "/superadmin/audit-logs", label: "Audit" }
 ];
 

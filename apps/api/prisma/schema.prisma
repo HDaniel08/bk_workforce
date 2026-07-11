@@ -119,6 +119,8 @@ model User {
   contractHours            ContractHours?
   mustChangePassword       Boolean            @default(false)
   isActive                 Boolean            @default(true)
+  isDeleted                Boolean            @default(false)
+  deletedAt                DateTime?
   lastLoginAt              DateTime?
   tenant                   Tenant?            @relation(fields: [tenantId], references: [id])
   createdAuditLogs         AuditLog[]         @relation("AuditActor")
@@ -132,6 +134,7 @@ model User {
   updatedAt                DateTime           @updatedAt
 
   @@index([tenantId])
+  @@index([isDeleted])
 }
 
 model PasswordResetToken {

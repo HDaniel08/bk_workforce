@@ -14,6 +14,8 @@ export interface ManagedUser {
   workerType: WorkerType | null;
   contractHours: ContractHours | null;
   isActive: boolean;
+  isDeleted: boolean;
+  deletedAt: string | null;
   mustChangePassword: boolean;
   createdAt: string;
 }
@@ -42,5 +44,20 @@ export async function createUser(input: UserInput) {
 
 export async function updateUser(id: string, input: Partial<UserInput>) {
   const response = await api.patch<ManagedUser>(`/users/${id}`, input);
+  return response.data;
+}
+
+export async function deleteUser(id: string) {
+  const response = await api.delete<ManagedUser>(`/users/${id}`);
+  return response.data;
+}
+
+export async function getDeletedUsers(params?: Record<string, string>) {
+  const response = await api.get<ManagedUser[]>("/users/deleted", { params });
+  return response.data;
+}
+
+export async function restoreUser(id: string) {
+  const response = await api.patch<ManagedUser>(`/users/${id}/restore`);
   return response.data;
 }
