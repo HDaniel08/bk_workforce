@@ -419,6 +419,7 @@ export class AvailabilityService {
   async closeSubmissionWeek(actor: AuthUser, weekStartDateValue: string) {
     const tenantId = this.requireManagerTenant(actor);
     const weekStartDate = getWeekStart(parseDateOnly(weekStartDateValue));
+    const closedAt = new Date();
     const submissionWeek = await this.prisma.availabilitySubmissionWeek.upsert({
       where: { tenantId_weekStartDate: { tenantId, weekStartDate } },
       create: {
@@ -427,12 +428,12 @@ export class AvailabilityService {
         status: AvailabilitySubmissionStatus.CLOSED,
         openedByUserId: actor.id,
         closedByUserId: actor.id,
-        closedAt: new Date()
+        closedAt
       },
       update: {
         status: AvailabilitySubmissionStatus.CLOSED,
         closedByUserId: actor.id,
-        closedAt: new Date()
+        closedAt
       }
     });
 
@@ -440,7 +441,21 @@ export class AvailabilityService {
       where: {
         tenantId,
         periodType: AvailabilityPeriodType.WEEKLY,
-        weekStartDate
+        weekStartDate,
+        status: "DRAFT"
+      },
+      data: {
+        status: "LOCKED",
+        submittedAt: closedAt
+      }
+    });
+
+    await this.prisma.availabilityWeek.updateMany({
+      where: {
+        tenantId,
+        periodType: AvailabilityPeriodType.WEEKLY,
+        weekStartDate,
+        status: { not: "LOCKED" }
       },
       data: {
         status: "LOCKED"
@@ -695,14 +710,6 @@ export class AvailabilityService {
               ...defaultDay
             }))
           : []
-      };
-    }
-
-    if (!fillMissingDays && availability.status === "DRAFT") {
-      return {
-        status: availability.status,
-        submittedAt: availability.submittedAt,
-        days: []
       };
     }
 
