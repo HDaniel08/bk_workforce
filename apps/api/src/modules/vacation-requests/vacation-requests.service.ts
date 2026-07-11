@@ -399,9 +399,9 @@ export class VacationRequestsService {
       startDate: toDateOnly(request.startDate),
       endDate: toDateOnly(request.endDate),
       tenantName: request.tenant.name,
-      requesterName: `${request.requester.firstName} ${request.requester.lastName}`,
+      requesterName: `${request.requester.lastName} ${request.requester.firstName}`,
       reviewerName: request.reviewedBy
-        ? `${request.reviewedBy.firstName} ${request.reviewedBy.lastName}`
+        ? `${request.reviewedBy.lastName} ${request.reviewedBy.firstName}`
         : null
     };
   }

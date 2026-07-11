@@ -337,7 +337,7 @@ export function ManagerTeamAvailabilityPage() {
                     <tr key={user.id} className="border-t border-brown/10">
                       <th className="sticky left-0 z-10 bg-white px-3 py-2 text-left align-top shadow-[8px_0_16px_rgba(80,35,20,0.08)]">
                         <div className="font-bold">
-                          {user.firstName} {user.lastName}
+                          {user.lastName} {user.firstName}
                         </div>
                       </th>
                       {printInfoColumns.map((column) => (
@@ -382,7 +382,7 @@ export function ManagerTeamAvailabilityPage() {
           <Card className="w-full max-w-md space-y-4 bg-white">
             <div>
               <h3 className="text-xl font-bold">
-                {editingDay.user.firstName} {editingDay.user.lastName}
+                {editingDay.user.lastName} {editingDay.user.firstName}
               </h3>
               <p className="mt-1 text-sm font-semibold text-brown/60">
                 {formatDate(editingDay.day.date)} · {formatDayName(editingDay.day.date)}

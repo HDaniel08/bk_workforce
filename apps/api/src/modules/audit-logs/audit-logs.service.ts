@@ -38,7 +38,7 @@ export class AuditLogsService {
       tenantName: log.tenant?.name ?? null,
       actorUserId: log.actorUserId,
       actorName: log.actor
-        ? `${log.actor.firstName} ${log.actor.lastName}`
+        ? `${log.actor.lastName} ${log.actor.firstName}`
         : null,
       action: log.action,
       entityType: log.entityType,

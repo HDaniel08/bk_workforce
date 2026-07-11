@@ -153,7 +153,7 @@ export function ManagerSchedulesPage() {
                 <div className="mt-2 space-y-1">
                   {shift.assignments.map((assignment) => (
                     <div key={assignment.id} className="flex items-center justify-between gap-2 text-sm">
-                      <span>{assignment.user.firstName} {assignment.user.lastName}</span>
+                      <span>{assignment.user.lastName} {assignment.user.firstName}</span>
                       <button disabled={!isDraft} className="font-bold text-red disabled:opacity-40" type="button" onClick={() => week && unassignShift(assignment.id).then(() => loadWeek(week.id))}>
                         Levétel
                       </button>
@@ -168,7 +168,7 @@ export function ManagerSchedulesPage() {
                     { value: "", label: "Valassz dolgozót" },
                     ...employees.map((employee) => ({
                       value: employee.id,
-                      label: `${employee.firstName} ${employee.lastName} Â· ${employee.workerType ?? employee.employeeSubRole} Â· ${employee.contractHours?.replace("HOURS_", "")} óra`
+                      label: `${employee.lastName} ${employee.firstName} Â· ${employee.workerType ?? employee.employeeSubRole} Â· ${employee.contractHours?.replace("HOURS_", "")} óra`
                     }))
                   ]}
                 />

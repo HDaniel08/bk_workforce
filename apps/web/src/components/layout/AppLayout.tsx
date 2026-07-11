@@ -39,7 +39,7 @@ export function AppLayout() {
       : user?.employeeSubRole === "MANAGER"
         ? managerItems
         : workerItems;
-  const userName = user ? `${user.firstName} ${user.lastName}` : "BK Workforce";
+  const userName = user ? `${user.lastName} ${user.firstName}` : "BK Workforce";
   const hasMoreMenu = items.length > 5;
   const bottomItems = hasMoreMenu ? items.slice(0, 4) : items;
   const moreItems = hasMoreMenu ? items.slice(4) : [];

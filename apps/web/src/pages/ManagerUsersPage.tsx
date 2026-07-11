@@ -115,7 +115,7 @@ export function ManagerUsersPage() {
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <div className="flex flex-wrap items-center gap-2">
-                  <h3 className="font-bold">{user.firstName} {user.lastName}</h3>
+                  <h3 className="font-bold">{user.lastName} {user.firstName}</h3>
                   <Badge tone={user.isActive ? "green" : "red"}>{user.isActive ? "Aktív" : "Inaktív"}</Badge>
                   <Badge>{employeeSubRoleLabel(user.employeeSubRole ?? user.role)}</Badge>
                 </div>

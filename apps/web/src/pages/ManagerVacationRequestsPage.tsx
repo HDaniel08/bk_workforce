@@ -88,7 +88,7 @@ export function ManagerVacationRequestsPage() {
             { value: "", label: "Összes" },
             ...users.map((user) => ({
               value: user.id,
-              label: `${user.firstName} ${user.lastName}`
+              label: `${user.lastName} ${user.firstName}`
             }))
           ]}
         />

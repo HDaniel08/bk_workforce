@@ -46,7 +46,7 @@ function formatWeekRange(weekStartDate: string) {
 }
 
 function employeeName(employee: Pick<ManagedUser, "firstName" | "lastName">) {
-  return `${employee.firstName} ${employee.lastName}`;
+  return `${employee.lastName} ${employee.firstName}`;
 }
 
 function sortEmployees(employees: ManagedUser[]) {

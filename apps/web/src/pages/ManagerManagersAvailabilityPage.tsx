@@ -143,7 +143,7 @@ export function ManagerManagersAvailabilityPage() {
                     <tr key={user.id} className="border-t border-brown/10">
                       <th className="sticky left-0 z-10 bg-white px-3 py-2 text-left align-top shadow-[8px_0_16px_rgba(80,35,20,0.08)]">
                         <div className="font-bold">
-                          {user.firstName} {user.lastName}
+                          {user.lastName} {user.firstName}
                         </div>
                       </th>
                       {week.map((date, dayIndex) => {
