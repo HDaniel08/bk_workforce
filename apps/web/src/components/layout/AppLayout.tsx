@@ -1,6 +1,8 @@
 ﻿import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { Button } from "../ui/Button";
 import { authStore } from "../../store/auth-store";
+import { useState } from "react";
+import { useLocation } from "react-router-dom";
 
 const adminItems = [
   { to: "/superadmin", label: "Dashboard" },
@@ -28,6 +30,8 @@ const workerItems = [
 
 export function AppLayout() {
   const navigate = useNavigate();
+  const location = useLocation();
+  const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false);
   const user = authStore.getUser();
   const items =
     user?.role === "ADMIN"
@@ -36,6 +40,13 @@ export function AppLayout() {
         ? managerItems
         : workerItems;
   const userName = user ? `${user.firstName} ${user.lastName}` : "BK Workforce";
+  const hasMoreMenu = items.length > 5;
+  const bottomItems = hasMoreMenu ? items.slice(0, 4) : items;
+  const moreItems = hasMoreMenu ? items.slice(4) : [];
+  const isMoreItemActive = moreItems.some(
+    (item) =>
+      location.pathname === item.to || location.pathname.startsWith(`${item.to}/`)
+  );
 
   function handleLogout() {
     authStore.logout();
@@ -75,8 +86,52 @@ export function AppLayout() {
         </main>
       </div>
 
-      <nav className="fixed inset-x-0 bottom-0 z-20 grid auto-cols-fr grid-flow-col gap-1 overflow-x-auto border-t border-brown/10 bg-white p-2 md:hidden">
-        {items.map((item) => (
+      {isMoreMenuOpen ? (
+        <>
+          <button
+            type="button"
+            aria-label="További menü bezárása"
+            className="fixed inset-0 z-30 bg-brown/30 md:hidden"
+            onClick={() => setIsMoreMenuOpen(false)}
+          />
+          <div className="fixed inset-x-3 bottom-20 z-40 max-h-[60vh] overflow-y-auto rounded-xl border border-brown/10 bg-white p-3 shadow-xl md:hidden">
+            <div className="mb-2 flex items-center justify-between px-1">
+              <p className="font-bold">További menüpontok</p>
+              <button
+                type="button"
+                className="rounded-md px-3 py-1 text-sm font-bold hover:bg-cream"
+                onClick={() => setIsMoreMenuOpen(false)}
+              >
+                Bezárás
+              </button>
+            </div>
+            <nav className="grid gap-1 sm:grid-cols-2">
+              {moreItems.map((item) => (
+                <NavLink
+                  key={item.to}
+                  to={item.to}
+                  className={({ isActive }) =>
+                    [
+                      "rounded-md px-3 py-3 text-sm font-bold transition",
+                      isActive ? "bg-brown text-cream" : "hover:bg-cream"
+                    ].join(" ")
+                  }
+                  onClick={() => setIsMoreMenuOpen(false)}
+                >
+                  {item.label}
+                </NavLink>
+              ))}
+            </nav>
+          </div>
+        </>
+      ) : null}
+
+      <nav
+        className={`fixed inset-x-0 bottom-0 z-20 grid gap-1 border-t border-brown/10 bg-white p-2 md:hidden ${
+          hasMoreMenu ? "grid-cols-5" : "auto-cols-fr grid-flow-col"
+        }`}
+      >
+        {bottomItems.map((item) => (
           <NavLink
             key={item.to}
             to={item.to}
@@ -91,6 +146,19 @@ export function AppLayout() {
             {item.label}
           </NavLink>
         ))}
+        {hasMoreMenu ? (
+          <button
+            type="button"
+            aria-expanded={isMoreMenuOpen}
+            className={[
+              "rounded-md px-1 py-2 text-center text-xs font-bold",
+              isMoreMenuOpen || isMoreItemActive ? "bg-brown text-cream" : "text-brown"
+            ].join(" ")}
+            onClick={() => setIsMoreMenuOpen((isOpen) => !isOpen)}
+          >
+            Továbbiak
+          </button>
+        ) : null}
       </nav>
     </div>
   );
