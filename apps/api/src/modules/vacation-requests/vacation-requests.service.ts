@@ -118,16 +118,24 @@ export class VacationRequestsService {
   }
 
   async reject(actor: AuthUser, id: string, dto: ReviewVacationRequestDto) {
-    const request = await this.getTenantPendingRequest(actor, id);
-    const updated = await this.prisma.vacationRequest.update({
-      where: { id },
-      data: {
-        status: VacationRequestStatus.REJECTED,
-        reviewedByUserId: actor.id,
-        reviewedAt: new Date(),
-        reviewerNote: dto.reviewerNote
-      },
-      include: this.requestInclude()
+    const request = await this.getTenantRejectableRequest(actor, id);
+    const wasApproved = request.status === VacationRequestStatus.APPROVED;
+
+    const updated = await this.prisma.$transaction(async (transaction) => {
+      if (wasApproved) {
+        await this.removeAvailabilityVacationDays(transaction, request);
+      }
+
+      return transaction.vacationRequest.update({
+        where: { id },
+        data: {
+          status: VacationRequestStatus.REJECTED,
+          reviewedByUserId: actor.id,
+          reviewedAt: new Date(),
+          reviewerNote: dto.reviewerNote
+        },
+        include: this.requestInclude()
+      });
     });
 
     await this.createAudit(actor, "VACATION_REQUEST_REJECTED", id, {
@@ -135,7 +143,8 @@ export class VacationRequestsService {
       startDate: toDateOnly(request.startDate),
       endDate: toDateOnly(request.endDate),
       status: VacationRequestStatus.REJECTED,
-      reviewedByUserId: actor.id
+      reviewedByUserId: actor.id,
+      approvalRevoked: wasApproved
     });
 
     return this.toRequestResponse(updated);
@@ -183,8 +192,10 @@ export class VacationRequestsService {
     };
 
     if (query.from || query.to) {
-      where.startDate = query.to ? { lte: parseDateOnly(query.to) } : undefined;
-      where.endDate = query.from ? { gte: parseDateOnly(query.from) } : undefined;
+      where.startDate = {
+        ...(query.from ? { gte: parseDateOnly(query.from) } : {}),
+        ...(query.to ? { lte: parseDateOnly(query.to) } : {})
+      };
     }
 
     const requests = await this.prisma.vacationRequest.findMany({
@@ -214,6 +225,37 @@ export class VacationRequestsService {
     }
     if (request.status !== VacationRequestStatus.PENDING) {
       throw new BadRequestException("ONLY_PENDING_CAN_BE_REVIEWED");
+    }
+
+    return request;
+  }
+
+  private async getTenantRejectableRequest(actor: AuthUser, id: string) {
+    if (!actor.tenantId) {
+      throw new ForbiddenException("TENANT_REQUIRED");
+    }
+
+    const request = await this.prisma.vacationRequest.findUnique({
+      where: { id },
+      include: this.requestInclude()
+    });
+
+    if (!request) {
+      throw new NotFoundException("VACATION_REQUEST_NOT_FOUND");
+    }
+    if (request.tenantId !== actor.tenantId) {
+      throw new ForbiddenException("VACATION_REQUEST_TENANT_DENIED");
+    }
+    if (request.status === VacationRequestStatus.PENDING) {
+      return request;
+    }
+    if (request.status !== VacationRequestStatus.APPROVED) {
+      throw new BadRequestException("ONLY_PENDING_OR_APPROVED_CAN_BE_REJECTED");
+    }
+
+    const today = parseDateOnly(toDateOnly(new Date()));
+    if (request.startDate <= today) {
+      throw new BadRequestException("STARTED_VACATION_CANNOT_BE_REJECTED");
     }
 
     return request;
@@ -298,6 +340,33 @@ export class VacationRequestsService {
     });
 
     return vacationDates.length;
+  }
+
+  private async removeAvailabilityVacationDays(
+    transaction: Prisma.TransactionClient,
+    request: Awaited<ReturnType<VacationRequestsService["getTenantRejectableRequest"]>>
+  ) {
+    const dates = this.expandDates(request.startDate, request.endDate);
+
+    for (const date of dates) {
+      await transaction.availabilityDay.deleteMany({
+        where: {
+          date,
+          type: this.isWeekend(date)
+            ? AvailabilityDayType.OFF
+            : AvailabilityDayType.VACATION,
+          note: this.isWeekend(date)
+            ? "Szabadsag idoszakaba eso hetvegi pihenonap"
+            : "Elfogadott szabadsagkerelem alapjan",
+          availabilityWeek: {
+            tenantId: request.tenantId,
+            userId: request.requesterUserId
+          }
+        }
+      });
+    }
+
+    return dates.length;
   }
 
   private validateDateRange(startDate: Date, endDate: Date) {
