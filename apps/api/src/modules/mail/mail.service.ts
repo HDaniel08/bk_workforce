@@ -38,6 +38,7 @@ interface EmailAction {
 interface EmailDetail {
   label: string;
   value: string;
+  code?: boolean;
 }
 
 interface BrandedEmailParams {
@@ -72,6 +73,7 @@ export class MailService {
         "Letrehoztuk a BK Workforce fiokodat.",
         `Bejelentkezesi email: ${params.email}`,
         `Ideiglenes jelszo: ${params.temporaryPassword}`,
+        "A jelszo masolasahoz jelold ki, majd valaszd a Masolas lehetoseget.",
         `Bejelentkezes: ${params.loginUrl}`,
         "",
         "Az elso belepes utan kotelezo uj jelszot megadni."
@@ -84,13 +86,20 @@ export class MailService {
           intro: ["Letrehoztuk a BK Workforce fiokodat."],
           details: [
             { label: "Bejelentkezesi email", value: params.email },
-            { label: "Ideiglenes jelszo", value: params.temporaryPassword }
+            {
+              label: "Ideiglenes jelszo",
+              value: params.temporaryPassword,
+              code: true
+            }
           ],
           action: {
             label: "Bejelentkezes",
             url: params.loginUrl
           },
-          outro: ["Az elso belepes utan kotelezo uj jelszot megadni."]
+          outro: [
+            "A jelszo masolasahoz jelold ki, mobilon pedig tartsd hosszan lenyomva, majd valaszd a Masolas lehetoseget.",
+            "Az elso belepes utan kotelezo uj jelszot megadni."
+          ]
         })
       ].join("")
     });
@@ -210,13 +219,17 @@ export class MailService {
     const details = params.details?.length
       ? [
           '<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin:20px 0;border-collapse:separate;border-spacing:0;border:1px solid rgba(80,35,20,0.12);border-radius:8px;overflow:hidden;">',
-          ...params.details.map(
-            (detail) => `
+          ...params.details.map((detail) => {
+            const valueStyle = detail.code
+              ? "font-family:Consolas,Monaco,monospace;font-size:17px;letter-spacing:.04em;word-break:break-all;user-select:all;-webkit-user-select:all;"
+              : "font-size:14px;";
+
+            return `
               <tr>
                 <td style="padding:12px 14px;border-bottom:1px solid rgba(80,35,20,0.10);background:#F5EBDC;color:#6f4a3b;font-size:12px;font-weight:700;text-transform:uppercase;">${this.escapeHtml(detail.label)}</td>
-                <td style="padding:12px 14px;border-bottom:1px solid rgba(80,35,20,0.10);background:#ffffff;color:#502314;font-size:14px;font-weight:700;">${this.escapeHtml(detail.value)}</td>
-              </tr>`
-          ),
+                <td style="padding:12px 14px;border-bottom:1px solid rgba(80,35,20,0.10);background:#ffffff;color:#502314;font-weight:700;${valueStyle}">${this.escapeHtml(detail.value)}</td>
+              </tr>`;
+          }),
           "</table>"
         ].join("")
       : "";
