@@ -33,6 +33,7 @@ export function AppLayout() {
   const navigate = useNavigate();
   const location = useLocation();
   const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false);
+  const [isDesktopSidebarOpen, setIsDesktopSidebarOpen] = useState(true);
   const user = authStore.getUser();
   const items =
     user?.role === "ADMIN"
@@ -55,33 +56,88 @@ export function AppLayout() {
   }
 
   return (
-    <div className="min-h-screen bg-cream text-brown md:grid md:grid-cols-[240px_1fr]">
-      <aside className="hidden border-r border-brown/10 bg-white/70 p-5 md:block">
-        <p className="text-xs font-bold uppercase tracking-wide text-red">BK Workforce</p>
-        <h1 className="mt-1 text-xl font-bold">{userName}</h1>
-        <nav className="mt-8 space-y-2">
-          {items.map((item) => (
-            <NavLink
-              key={item.to}
-              to={item.to}
-              end={item.to === "/superadmin" || item.to === "/manager"}
-              className={({ isActive }) =>
-                [
-                  "block rounded-md px-3 py-2 text-sm font-bold transition",
-                  isActive ? "bg-brown text-cream" : "hover:bg-cream"
-                ].join(" ")
-              }
-            >
-              {item.label}
-            </NavLink>
-          ))}
-        </nav>
-        <Button className="mt-8 w-full" variant="ghost" onClick={handleLogout}>
+    <div
+      className={[
+        "min-h-screen bg-cream text-brown md:grid md:transition-[grid-template-columns] md:duration-200",
+        isDesktopSidebarOpen
+          ? "md:grid-cols-[240px_1fr]"
+          : "md:grid-cols-[0_1fr]"
+      ].join(" ")}
+    >
+      <header className="sticky top-0 z-20 flex items-center justify-between gap-3 border-b border-brown/10 bg-white/95 px-4 py-3 backdrop-blur md:hidden">
+        <div className="min-w-0">
+          <p className="text-xs font-bold uppercase tracking-wide text-red">BK Workforce</p>
+          <p className="truncate text-sm font-bold">{userName}</p>
+        </div>
+        <Button className="shrink-0" variant="ghost" onClick={handleLogout}>
           Kijelentkezés
         </Button>
+      </header>
+
+      <aside
+        className={[
+          "hidden overflow-hidden bg-white/70 md:block",
+          isDesktopSidebarOpen
+            ? "border-r border-brown/10 p-5"
+            : "border-r-0 p-0"
+        ].join(" ")}
+      >
+        <div className="min-w-[199px]">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-xs font-bold uppercase tracking-wide text-red">
+                BK Workforce
+              </p>
+              <h1 className="mt-1 truncate text-xl font-bold">{userName}</h1>
+            </div>
+            <button
+              type="button"
+              aria-label="Oldalsó navigáció becsukása"
+              aria-expanded={isDesktopSidebarOpen}
+              title="Oldalsáv becsukása"
+              className="shrink-0 rounded-md px-2 py-1 text-lg font-bold transition hover:bg-cream"
+              onClick={() => setIsDesktopSidebarOpen(false)}
+            >
+              ←
+            </button>
+          </div>
+          <nav className="mt-8 space-y-2">
+            {items.map((item) => (
+              <NavLink
+                key={item.to}
+                to={item.to}
+                end={item.to === "/superadmin" || item.to === "/manager"}
+                className={({ isActive }) =>
+                  [
+                    "block rounded-md px-3 py-2 text-sm font-bold transition",
+                    isActive ? "bg-brown text-cream" : "hover:bg-cream"
+                  ].join(" ")
+                }
+              >
+                {item.label}
+              </NavLink>
+            ))}
+          </nav>
+          <Button className="mt-8 w-full" variant="ghost" onClick={handleLogout}>
+            Kijelentkezés
+          </Button>
+        </div>
       </aside>
 
       <div className="pb-20 md:pb-0">
+        {!isDesktopSidebarOpen ? (
+          <div className="hidden px-4 pt-4 md:block">
+            <button
+              type="button"
+              aria-label="Oldalsó navigáció kinyitása"
+              aria-expanded={isDesktopSidebarOpen}
+              className="rounded-md bg-white px-3 py-2 text-sm font-bold shadow-soft transition hover:bg-brown hover:text-cream"
+              onClick={() => setIsDesktopSidebarOpen(true)}
+            >
+              ☰ Menü megnyitása
+            </button>
+          </div>
+        ) : null}
         <main className="mx-auto max-w-6xl px-4 py-5 md:px-8 md:py-8">
           <Outlet />
         </main>

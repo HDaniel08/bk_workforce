@@ -5,13 +5,25 @@ import {
   submitMyAvailability,
   type AvailabilityDay
 } from "../api/availability";
+import { MissingTimeConfirmationDialog } from "../components/availability/MissingTimeConfirmationDialog";
 import { Badge } from "../components/ui/Badge";
 import { Button } from "../components/ui/Button";
 import { Card } from "../components/ui/Card";
 import { Input } from "../components/ui/Input";
 import { Select } from "../components/ui/Select";
 import { getCurrentMonthValue, getMonthWeeks } from "../utils/date";
+import {
+  fillMissingTimeBoundary,
+  getMissingTimeBoundary,
+  type MissingTimeBoundary
+} from "../utils/availability-time-defaults";
 import { availabilityStatusLabel } from "../utils/status-labels";
+
+interface PendingSave {
+  days: AvailabilityDay[];
+  submit: boolean;
+  boundary: MissingTimeBoundary;
+}
 
 function formatDayName(date: string) {
   return new Intl.DateTimeFormat("hu-HU", { weekday: "short" }).format(
@@ -67,6 +79,7 @@ export function ManagerMyAvailabilityPage() {
   const [status, setStatus] = useState("DRAFT");
   const [message, setMessage] = useState<string | null>(null);
   const [editingDay, setEditingDay] = useState<AvailabilityDay | null>(null);
+  const [pendingSave, setPendingSave] = useState<PendingSave | null>(null);
 
   const monthStartDate = `${month}-01`;
   const weeks = getMonthWeeks(monthStartDate);
@@ -88,13 +101,12 @@ export function ManagerMyAvailabilityPage() {
     setEditingDay(day);
   }
 
-  async function save(submit: boolean) {
-    setMessage(null);
+  async function persist(daysToSave: AvailabilityDay[], submit: boolean) {
     const payload = {
       periodType: "MONTHLY" as const,
       weekStartDate: null,
       monthStartDate,
-      days
+      days: daysToSave
     };
     const data = submit
       ? await submitMyAvailability(payload)
@@ -102,6 +114,38 @@ export function ManagerMyAvailabilityPage() {
     setDays(data.availability.days);
     setStatus(data.availability.status);
     setMessage(submit ? "Havi ráérés leadva" : "Piszkozat mentve");
+  }
+
+  function continueSave(daysToSave: AvailabilityDay[], submit: boolean) {
+    const boundary = getMissingTimeBoundary(daysToSave);
+
+    if (boundary) {
+      setPendingSave({ days: daysToSave, submit, boundary });
+      return;
+    }
+
+    setDays(daysToSave);
+    void persist(daysToSave, submit);
+  }
+
+  function save(submit: boolean) {
+    setMessage(null);
+    continueSave(days, submit);
+  }
+
+  function confirmMissingTime() {
+    if (!pendingSave) {
+      return;
+    }
+
+    const normalizedDays = fillMissingTimeBoundary(
+      pendingSave.days,
+      pendingSave.boundary
+    );
+    const submit = pendingSave.submit;
+
+    setPendingSave(null);
+    continueSave(normalizedDays, submit);
   }
 
   return (
@@ -317,6 +361,14 @@ export function ManagerMyAvailabilityPage() {
             </Button>
           </Card>
         </div>
+      ) : null}
+
+      {pendingSave ? (
+        <MissingTimeConfirmationDialog
+          boundary={pendingSave.boundary}
+          onConfirm={confirmMissingTime}
+          onCancel={() => setPendingSave(null)}
+        />
       ) : null}
     </section>
   );

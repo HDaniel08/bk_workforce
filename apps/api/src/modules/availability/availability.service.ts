@@ -645,21 +645,26 @@ export class AvailabilityService {
         throw new BadRequestException("WORK_PREFERENCE_REQUIRED");
       }
 
-      if (day.workPreference === WorkPreference.TIME_RANGE) {
-        if (!day.startTime || !day.endTime) {
-          throw new BadRequestException("TIME_RANGE_REQUIRED");
-        }
-        this.validateTimeWindow(day.startTime);
-        this.validateTimeWindow(day.endTime);
+      const startTime =
+        day.workPreference === WorkPreference.TIME_RANGE
+          ? day.startTime || "07:00"
+          : null;
+      const endTime =
+        day.workPreference === WorkPreference.TIME_RANGE
+          ? day.endTime || "01:00"
+          : null;
+
+      if (startTime && endTime) {
+        this.validateTimeWindow(startTime);
+        this.validateTimeWindow(endTime);
       }
 
       return {
         date,
         type: day.type,
         workPreference: day.workPreference,
-        startTime:
-          day.workPreference === WorkPreference.TIME_RANGE ? day.startTime : null,
-        endTime: day.workPreference === WorkPreference.TIME_RANGE ? day.endTime : null,
+        startTime,
+        endTime,
         note: day.note || null
       };
     });

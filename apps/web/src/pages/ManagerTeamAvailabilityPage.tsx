@@ -10,11 +10,17 @@ import {
   type TeamAvailabilityResponse
 } from "../api/availability";
 import type { ContractHours, WorkerType } from "../store/auth-store";
+import { MissingTimeConfirmationDialog } from "../components/availability/MissingTimeConfirmationDialog";
 import { Button } from "../components/ui/Button";
 import { Card } from "../components/ui/Card";
 import { Input } from "../components/ui/Input";
 import { Select } from "../components/ui/Select";
 import { getCurrentWeekStartDate, getWeekDates } from "../utils/date";
+import {
+  fillMissingTimeBoundary,
+  getMissingTimeBoundary,
+  type MissingTimeBoundary
+} from "../utils/availability-time-defaults";
 import { submissionWeekStatusLabel } from "../utils/status-labels";
 
 function formatDayName(date: string) {
@@ -78,6 +84,11 @@ type TeamUser = TeamAvailabilityResponse["users"][number];
 type EditingDay = {
   user: TeamUser;
   day: AvailabilityDay;
+};
+
+type PendingDaySave = {
+  editingDay: EditingDay;
+  boundary: MissingTimeBoundary;
 };
 
 type WorkerGroup = {
@@ -146,6 +157,7 @@ export function ManagerTeamAvailabilityPage() {
   const [editingDay, setEditingDay] = useState<EditingDay | null>(null);
   const [isSavingDay, setIsSavingDay] = useState(false);
   const [dayError, setDayError] = useState<string | null>(null);
+  const [pendingDaySave, setPendingDaySave] = useState<PendingDaySave | null>(null);
 
   async function load() {
     const [teamData, submissionData] = await Promise.all([
@@ -193,17 +205,13 @@ export function ManagerTeamAvailabilityPage() {
     setEditingDay((current) => (current ? { ...current, day } : current));
   }
 
-  async function saveEditingDay() {
-    if (!editingDay) {
-      return;
-    }
-
+  async function persistEditingDay(dayToSave: EditingDay) {
     setIsSavingDay(true);
     setDayError(null);
     try {
-      await updateTeamAvailabilityDay(editingDay.user.id, {
+      await updateTeamAvailabilityDay(dayToSave.user.id, {
         weekStartDate,
-        day: editingDay.day
+        day: dayToSave.day
       });
       setEditingDay(null);
       await load();
@@ -212,6 +220,47 @@ export function ManagerTeamAvailabilityPage() {
     } finally {
       setIsSavingDay(false);
     }
+  }
+
+  function continueSaveEditingDay(dayToSave: EditingDay) {
+    const boundary = getMissingTimeBoundary([dayToSave.day]);
+
+    if (boundary) {
+      setPendingDaySave({ editingDay: dayToSave, boundary });
+      return;
+    }
+
+    setEditingDay(dayToSave);
+    void persistEditingDay(dayToSave);
+  }
+
+  function saveEditingDay() {
+    if (editingDay) {
+      continueSaveEditingDay(editingDay);
+    }
+  }
+
+  function confirmMissingTime() {
+    if (!pendingDaySave) {
+      return;
+    }
+
+    const normalizedDay = fillMissingTimeBoundary(
+      [pendingDaySave.editingDay.day],
+      pendingDaySave.boundary
+    )[0];
+
+    if (!normalizedDay) {
+      return;
+    }
+
+    const normalizedEditingDay = {
+      ...pendingDaySave.editingDay,
+      day: normalizedDay
+    };
+
+    setPendingDaySave(null);
+    continueSaveEditingDay(normalizedEditingDay);
   }
 
   function printClosedAvailability() {
@@ -482,6 +531,14 @@ export function ManagerTeamAvailabilityPage() {
             </div>
           </Card>
         </div>
+      ) : null}
+
+      {pendingDaySave ? (
+        <MissingTimeConfirmationDialog
+          boundary={pendingDaySave.boundary}
+          onConfirm={confirmMissingTime}
+          onCancel={() => setPendingDaySave(null)}
+        />
       ) : null}
     </section>
   );

@@ -1,6 +1,6 @@
 ﻿import { isAxiosError } from "axios";
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { superadminLogin } from "../api/auth";
 import { authStore } from "../store/auth-store";
 import { AuthCard } from "../ui/AuthCard";
@@ -16,9 +16,14 @@ function getLoginErrorMessage(error: unknown) {
 
 export function SuperAdminLoginPage() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(() =>
+    searchParams.get("reason") === "session-expired"
+      ? "A munkameneted lejárt, kérjük, jelentkezz be újra."
+      : null
+  );
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   async function handleSubmit() {
@@ -58,4 +63,3 @@ export function SuperAdminLoginPage() {
     />
   );
 }
-

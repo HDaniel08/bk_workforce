@@ -1,3 +1,4 @@
+import { isAxiosError } from "axios";
 import { api } from "../lib/api";
 
 export type UserRole = "ADMIN" | "EMPLOYEE";
@@ -85,3 +86,31 @@ api.interceptors.request.use((config) => {
 
   return config;
 });
+
+api.interceptors.response.use(
+  (response) => response,
+  (error: unknown) => {
+    if (
+      isAxiosError(error) &&
+      error.response?.status === 401 &&
+      authStore.getAccessToken()
+    ) {
+      const requestUrl = error.config?.url ?? "";
+      const errorMessage = error.response.data?.message;
+      const isLoginRequest =
+        requestUrl === "/auth/login" || requestUrl === "/auth/superadmin/login";
+      const isInvalidCurrentPassword =
+        requestUrl === "/auth/change-password" && errorMessage === "INVALID_CREDENTIALS";
+
+      if (!isLoginRequest && !isInvalidCurrentPassword) {
+        const user = authStore.getUser();
+        const loginPath = user?.role === "ADMIN" ? "/superadmin/login" : "/login";
+
+        authStore.logout();
+        window.location.replace(`${loginPath}?reason=session-expired`);
+      }
+    }
+
+    return Promise.reject(error);
+  }
+);
