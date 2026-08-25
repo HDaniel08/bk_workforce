@@ -115,6 +115,9 @@ export function ManagerAvailabilityReportPage({
 }: ManagerAvailabilityReportPageProps) {
   const [closedWeeks, setClosedWeeks] = useState<AvailabilitySubmissionWeek[]>([]);
   const [selectedWeekStarts, setSelectedWeekStarts] = useState<string[]>([]);
+  const [studentWeekYear, setStudentWeekYear] = useState(currentYear);
+  const [studentWeekMonth, setStudentWeekMonth] = useState(0);
+  const [showOlderWeeks, setShowOlderWeeks] = useState(false);
   const [studentReports, setStudentReports] = useState<StudentWorkCoverageReport[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -149,6 +152,7 @@ export function ManagerAvailabilityReportPage({
         }
         setClosedWeeks(sortedWeeks);
         setSelectedWeekStarts([initialWeekStart]);
+        setStudentWeekYear(Number(initialWeekStart.slice(0, 4)));
         return getStudentWorkCoverageReport({
           from: initialWeekStart,
           to: addDays(initialWeekStart, 6)
@@ -226,6 +230,29 @@ export function ManagerAvailabilityReportPage({
     (employee) => employee.userId === selectedFullTimeUserId
   );
 
+  const studentWeekYears = useMemo(
+    () =>
+      [...new Set(closedWeeks.map((week) => Number(week.weekStartDate.slice(0, 4))))]
+        .sort((a, b) => b - a),
+    [closedWeeks]
+  );
+
+  const filteredClosedWeeks = useMemo(
+    () =>
+      closedWeeks.filter((week) => {
+        const date = new Date(`${week.weekStartDate}T00:00:00.000Z`);
+        return (
+          date.getUTCFullYear() === studentWeekYear &&
+          (studentWeekMonth === 0 || date.getUTCMonth() + 1 === studentWeekMonth)
+        );
+      }),
+    [closedWeeks, studentWeekMonth, studentWeekYear]
+  );
+
+  const displayedClosedWeeks = showOlderWeeks
+    ? filteredClosedWeeks
+    : filteredClosedWeeks.slice(0, 8);
+
   const studentChartDays = useMemo(
     () =>
       reportWeekdayNames.map((name, dayIndex) => {
@@ -279,19 +306,99 @@ export function ManagerAvailabilityReportPage({
                 onSubmit={handleStudentSubmit}
               >
                 <fieldset>
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <legend className="text-sm font-bold">Lezárt hetek</legend>
-                    <div className="flex gap-3 text-xs font-bold">
+                  <legend className="text-sm font-bold">Lezárt hetek</legend>
+
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {[4, 8].map((count) => (
+                      <button
+                        key={count}
+                        type="button"
+                        className="rounded-full border border-brown/15 bg-white px-3 py-1.5 text-xs font-bold hover:border-red/40"
+                        onClick={() => {
+                          const recentWeeks = closedWeeks.slice(0, count);
+                          setSelectedWeekStarts(
+                            recentWeeks.map((week) => week.weekStartDate)
+                          );
+                          if (recentWeeks[0]) {
+                            setStudentWeekYear(
+                              Number(recentWeeks[0].weekStartDate.slice(0, 4))
+                            );
+                          }
+                          setStudentWeekMonth(0);
+                          setShowOlderWeeks(false);
+                        }}
+                      >
+                        Utolsó {count} hét
+                      </button>
+                    ))}
+                    <button
+                      type="button"
+                      className="rounded-full border border-brown/15 bg-white px-3 py-1.5 text-xs font-bold hover:border-red/40"
+                      onClick={() => {
+                        setStudentWeekYear(currentYear);
+                        setStudentWeekMonth(0);
+                        setShowOlderWeeks(false);
+                        setSelectedWeekStarts(
+                          closedWeeks
+                            .filter(
+                              (week) =>
+                                Number(week.weekStartDate.slice(0, 4)) === currentYear
+                            )
+                            .map((week) => week.weekStartDate)
+                        );
+                      }}
+                    >
+                      Aktuális év
+                    </button>
+                  </div>
+
+                  <div className="mt-4 flex flex-wrap items-end gap-3">
+                    <label className="grid gap-1 text-xs font-bold">
+                      Év
+                      <select
+                        value={studentWeekYear}
+                        className="rounded-md border border-brown/20 bg-white px-3 py-2 text-sm font-normal"
+                        onChange={(event) => {
+                          setStudentWeekYear(Number(event.target.value));
+                          setShowOlderWeeks(false);
+                        }}
+                      >
+                        {studentWeekYears.map((year) => (
+                          <option key={year} value={year}>
+                            {year}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="grid gap-1 text-xs font-bold">
+                      Hónap
+                      <select
+                        value={studentWeekMonth}
+                        className="rounded-md border border-brown/20 bg-white px-3 py-2 text-sm font-normal"
+                        onChange={(event) => {
+                          setStudentWeekMonth(Number(event.target.value));
+                          setShowOlderWeeks(false);
+                        }}
+                      >
+                        <option value={0}>Minden hónap</option>
+                        {monthNames.map((month, index) => (
+                          <option key={month} value={index + 1}>
+                            {month}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <div className="flex gap-3 pb-2 text-xs font-bold">
                       <button
                         type="button"
                         className="text-red hover:underline"
                         onClick={() =>
                           setSelectedWeekStarts(
-                            closedWeeks.map((week) => week.weekStartDate)
+                            filteredClosedWeeks.map((week) => week.weekStartDate)
                           )
                         }
                       >
-                        Összes kijelölése
+                        Szűrt hetek kijelölése
                       </button>
                       <button
                         type="button"
@@ -302,8 +409,34 @@ export function ManagerAvailabilityReportPage({
                       </button>
                     </div>
                   </div>
-                  <div className="mt-2 grid max-h-52 gap-2 overflow-y-auto rounded-md border border-brown/15 bg-cream/40 p-3 sm:grid-cols-2 lg:grid-cols-3">
-                    {closedWeeks.map((week) => {
+
+                  {selectedWeekStarts.length > 0 ? (
+                    <div className="mt-3 flex gap-2 overflow-x-auto pb-1">
+                      {selectedWeekStarts.map((weekStart) => (
+                        <span
+                          key={weekStart}
+                          className="flex shrink-0 items-center gap-2 rounded-full bg-red/10 px-3 py-1 text-xs font-bold text-red"
+                        >
+                          {formatWeek(weekStart)}
+                          <button
+                            type="button"
+                            aria-label={`${formatWeek(weekStart)} eltávolítása`}
+                            className="text-base leading-none"
+                            onClick={() =>
+                              setSelectedWeekStarts((current) =>
+                                current.filter((item) => item !== weekStart)
+                              )
+                            }
+                          >
+                            ×
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+                  ) : null}
+
+                  <div className="mt-3 grid gap-2 rounded-md border border-brown/15 bg-cream/40 p-3 sm:grid-cols-2 lg:grid-cols-3">
+                    {displayedClosedWeeks.map((week) => {
                       const isSelected = selectedWeekStarts.includes(week.weekStartDate);
                       return (
                         <label
@@ -332,7 +465,24 @@ export function ManagerAvailabilityReportPage({
                         </label>
                       );
                     })}
+                    {filteredClosedWeeks.length === 0 ? (
+                      <p className="text-sm text-brown/60 sm:col-span-2 lg:col-span-3">
+                        Ehhez a szűréshez nincs lezárt hét.
+                      </p>
+                    ) : null}
                   </div>
+
+                  {filteredClosedWeeks.length > 8 ? (
+                    <button
+                      type="button"
+                      className="mt-2 text-xs font-bold text-red hover:underline"
+                      onClick={() => setShowOlderWeeks((current) => !current)}
+                    >
+                      {showOlderWeeks
+                        ? "Korábbi hetek elrejtése"
+                        : `Korábbi hetek megjelenítése (${filteredClosedWeeks.length - 8})`}
+                    </button>
+                  ) : null}
                 </fieldset>
                 <div className="mt-3 flex items-center gap-3">
                   <Button type="submit" disabled={isLoading}>
