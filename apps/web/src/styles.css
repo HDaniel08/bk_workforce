@@ -144,4 +144,14 @@ input {
   .availability-print-table button span + span {
     display: none;
   }
+
+  .availability-print-table button .availability-print-note {
+    display: block;
+    margin-top: 0.7mm;
+    font-size: 6px;
+    font-weight: 400;
+    line-height: 1.15;
+    overflow-wrap: anywhere;
+    white-space: normal;
+  }
 }

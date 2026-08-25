@@ -44,6 +44,10 @@ function formatFullDate(date: string) {
   }).format(new Date(`${date}T00:00:00`));
 }
 
+function escapeCsvCell(value: string) {
+  return `"${value.replace(/"/g, '""')}"`;
+}
+
 function getCellStyle(day?: AvailabilityDay) {
   if (!day) {
     return {
@@ -271,6 +275,44 @@ export function ManagerTeamAvailabilityPage() {
     window.print();
   }
 
+  function downloadAvailabilityExcel() {
+    if (!isSubmissionClosed || !team) {
+      return;
+    }
+
+    const headers = [
+      "Csoport",
+      "Dolgozó",
+      ...days.flatMap((date) => [
+        `${formatFullDate(date)} ${formatDayName(date)} - Ráérés`,
+        `${formatFullDate(date)} ${formatDayName(date)} - Megjegyzés`
+      ])
+    ];
+    const rows = groupedUsers.flatMap((group) =>
+      group.users.map((user) => [
+        group.title,
+        `${user.lastName} ${user.firstName}`,
+        ...days.flatMap((date) => {
+          const day = user.availability.days.find((item) => item.date === date);
+          return [getCellStyle(day).label, day?.note ?? ""];
+        })
+      ])
+    );
+    const csv = `\uFEFF${[headers, ...rows]
+      .map((row) => row.map((cell) => escapeCsvCell(cell)).join(";"))
+      .join("\r\n")}`;
+    const url = URL.createObjectURL(
+      new Blob([csv], { type: "text/csv;charset=utf-8" })
+    );
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `csapat-raeres-${weekStartDate}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  }
+
   return (
     <section className="space-y-5">
       <div className="print:hidden">
@@ -281,7 +323,7 @@ export function ManagerTeamAvailabilityPage() {
       </div>
 
       <Card className="space-y-4 print:hidden">
-        <div className="grid gap-3 md:grid-cols-[1fr_auto_auto_auto] md:items-end">
+        <div className="grid gap-3 md:grid-cols-[1fr_auto_auto_auto_auto] md:items-end">
           <Input
             label="Hét kezdete"
             type="date"
@@ -311,6 +353,13 @@ export function ManagerTeamAvailabilityPage() {
             onClick={printClosedAvailability}
           >
             Nyomtatás / PDF
+          </Button>
+          <Button
+            variant="ghost"
+            disabled={!isSubmissionClosed}
+            onClick={downloadAvailabilityExcel}
+          >
+            Excel letöltés
           </Button>
         </div>
         <p className="text-sm font-semibold text-brown/70">
@@ -400,6 +449,11 @@ export function ManagerTeamAvailabilityPage() {
                           (item) => item.date === headerDay
                         );
                         const style = getCellStyle(day);
+                        const managerEditor =
+                          day?.editor?.type === "MANAGER" ? day.editor.user : null;
+                        const managerHint = managerEditor
+                          ? `Manager módosította: ${managerEditor.lastName} ${managerEditor.firstName}`
+                          : "Manager módosította";
                         return (
                           <td key={headerDay} className="border-l border-brown/10 p-1 align-top">
                             <button
@@ -409,8 +463,16 @@ export function ManagerTeamAvailabilityPage() {
                             >
                               <span>{style.label}</span>
                               {day?.note ? (
-                                <span className="mt-1 block text-xs font-normal opacity-75">
+                                <span className="availability-print-note mt-1 block text-xs font-normal opacity-75">
                                   {day.note}
+                                </span>
+                              ) : null}
+                              {day?.editor?.type === "MANAGER" ? (
+                                <span
+                                  className="mt-1 block text-[10px] font-semibold opacity-75"
+                                  title={managerHint}
+                                >
+                                  Manager módosította
                                 </span>
                               ) : null}
                             </button>

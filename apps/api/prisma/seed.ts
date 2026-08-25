@@ -299,7 +299,11 @@ async function main() {
               userIndex,
               weekIndex,
               worker.workerType ?? "STUDENT"
-            )
+            ).map((day) => ({
+              ...day,
+              editorType: "SELF" as const,
+              lastModifiedByUserId: worker.id
+            }))
           }
         }
       });
@@ -318,7 +322,13 @@ async function main() {
           status: "SUBMITTED",
           submittedAt: addUtcDays(monthStartDate, 1),
           days: {
-            create: getManagerAvailabilityDays(monthStartDate, managerIndex)
+            create: getManagerAvailabilityDays(monthStartDate, managerIndex).map(
+              (day) => ({
+                ...day,
+                editorType: "SELF" as const,
+                lastModifiedByUserId: manager.id
+              })
+            )
           }
         }
       });

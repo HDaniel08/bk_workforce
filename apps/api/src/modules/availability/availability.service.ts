@@ -4,6 +4,7 @@ import {
   Injectable,
 } from "@nestjs/common";
 import {
+  AvailabilityDayEditorType,
   AvailabilityDayType,
   AvailabilityPeriodType,
   AvailabilitySubmissionStatus,
@@ -16,7 +17,9 @@ import {
 import type { AuthUser } from "../auth/types/auth-user.type";
 import { PrismaService } from "../prisma/prisma.service";
 import type {
+  FullTimeRequestsReportQueryDto,
   MyAvailabilityQueryDto,
+  StudentWorkCoverageReportQueryDto,
   TeamAvailabilityQueryDto
 } from "./dto/availability-query.dto";
 import type { AvailabilityDayDto } from "./dto/availability-day.dto";
@@ -47,6 +50,15 @@ type DefaultAvailabilityDay = {
   startTime: string | null;
   endTime: string | null;
   note: string;
+};
+
+type NormalizedAvailabilityDay = {
+  date: Date;
+  type: AvailabilityDayType;
+  workPreference: WorkPreference | null;
+  startTime: string | null;
+  endTime: string | null;
+  note: string | null;
 };
 
 @Injectable()
@@ -106,6 +118,225 @@ export class AvailabilityService {
     }));
   }
 
+  async getStudentWorkCoverageReport(
+    actor: AuthUser,
+    query: StudentWorkCoverageReportQueryDto
+  ) {
+    const tenantId = this.requireManagerTenant(actor);
+    const from = parseDateOnly(query.from);
+    const to = parseDateOnly(query.to);
+
+    if (from > to) {
+      throw new BadRequestException("REPORT_FROM_AFTER_TO");
+    }
+
+    if (to > getWeekEnd(new Date())) {
+      throw new BadRequestException("REPORT_RANGE_AFTER_CURRENT_WEEK");
+    }
+
+    const weekStarts: Date[] = [];
+    const lastWeekStart = getWeekStart(to);
+    for (
+      let weekStart = getWeekStart(from);
+      weekStart <= lastWeekStart;
+      weekStart = new Date(weekStart.getTime() + 7 * 24 * 60 * 60 * 1000)
+    ) {
+      weekStarts.push(weekStart);
+    }
+
+    const closedWeeks = await this.prisma.availabilitySubmissionWeek.findMany({
+      where: {
+        tenantId,
+        weekStartDate: { in: weekStarts },
+        status: AvailabilitySubmissionStatus.CLOSED
+      },
+      select: { weekStartDate: true }
+    });
+
+    if (closedWeeks.length !== weekStarts.length) {
+      throw new BadRequestException("REPORT_REQUIRES_CLOSED_WEEKS");
+    }
+
+    const students = await this.prisma.user.findMany({
+      where: {
+        tenantId,
+        isActive: true,
+        isDeleted: false,
+        role: UserRole.EMPLOYEE,
+        employeeSubRole: EmployeeSubRole.WORKER,
+        workerType: WorkerType.STUDENT
+      },
+      select: {
+        id: true,
+        availabilityWeeks: {
+          where: {
+            periodType: AvailabilityPeriodType.WEEKLY,
+            weekStartDate: { in: weekStarts }
+          },
+          select: {
+            days: {
+              where: { date: { gte: from, lte: to } },
+              select: { date: true, type: true }
+            }
+          }
+        }
+      }
+    });
+
+    const totalStudents = students.length;
+    const days = [];
+    for (
+      let date = new Date(from);
+      date <= to;
+      date = new Date(date.getTime() + 24 * 60 * 60 * 1000)
+    ) {
+      const dateOnly = toDateOnly(date);
+      let availableStudents = 0;
+      let recordedStudents = 0;
+
+      for (const student of students) {
+        const day = student.availabilityWeeks
+          .flatMap((week) => week.days)
+          .find((item) => toDateOnly(item.date) === dateOnly);
+
+        if (day) {
+          recordedStudents += 1;
+        }
+        if (day?.type === AvailabilityDayType.WORK) {
+          availableStudents += 1;
+        }
+      }
+
+      days.push({
+        date: dateOnly,
+        availableStudents,
+        recordedStudents,
+        totalStudents,
+        percentage:
+          totalStudents === 0
+            ? 0
+            : Math.round((availableStudents / totalStudents) * 100)
+      });
+    }
+
+    return {
+      from: toDateOnly(from),
+      to: toDateOnly(to),
+      totalStudents,
+      days
+    };
+  }
+
+  async getFullTimeRequestsReport(
+    actor: AuthUser,
+    query: FullTimeRequestsReportQueryDto
+  ) {
+    const tenantId = this.requireManagerTenant(actor);
+    const startDate = new Date(Date.UTC(query.year, query.month - 1, 1));
+    const endDate = new Date(Date.UTC(query.year, query.month, 0));
+    const users = await this.prisma.user.findMany({
+      where: {
+        tenantId,
+        isActive: true,
+        isDeleted: false,
+        role: UserRole.EMPLOYEE,
+        employeeSubRole: EmployeeSubRole.WORKER,
+        workerType: WorkerType.FULL_TIME
+      },
+      orderBy: [{ lastName: "asc" }, { firstName: "asc" }],
+      select: {
+        id: true,
+        firstName: true,
+        lastName: true,
+        contractHours: true,
+        availabilityWeeks: {
+          select: {
+            days: {
+              where: { date: { gte: startDate, lte: endDate } },
+              orderBy: { updatedAt: "asc" },
+              select: {
+                date: true,
+                type: true,
+                workPreference: true,
+                startTime: true,
+                endTime: true,
+                note: true,
+                editorType: true,
+                updatedAt: true
+              }
+            }
+          }
+        }
+      }
+    });
+
+    const employees = users.map((user) => {
+      const latestDayByDate = new Map(
+        user.availabilityWeeks
+          .flatMap((week) => week.days)
+          .map((day) => [toDateOnly(day.date), day] as const)
+      );
+      const requests = [...latestDayByDate.values()]
+        .filter(
+          (day) =>
+            day.editorType === AvailabilityDayEditorType.SELF &&
+            (day.type === AvailabilityDayType.OFF ||
+              (day.type === AvailabilityDayType.WORK &&
+                day.workPreference === WorkPreference.TIME_RANGE))
+        )
+        .sort((left, right) => left.date.getTime() - right.date.getTime())
+        .map((day) => ({
+          date: toDateOnly(day.date),
+          type: day.type,
+          workPreference: day.workPreference,
+          startTime: day.startTime,
+          endTime: day.endTime,
+          note: day.note ?? "",
+          isWeekend: day.date.getUTCDay() === 0 || day.date.getUTCDay() === 6
+        }));
+      const weekdayDistribution = Array.from({ length: 7 }, (_, dayOfWeek) => ({
+        dayOfWeek,
+        count: requests.filter(
+          (request) =>
+            new Date(`${request.date}T00:00:00.000Z`).getUTCDay() === dayOfWeek
+        ).length
+      }));
+
+      return {
+        userId: user.id,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        contractHours: user.contractHours,
+        totalRequests: requests.length,
+        weekdayRequests: requests.filter((request) => !request.isWeekend).length,
+        weekendRequests: requests.filter((request) => request.isWeekend).length,
+        offRequests: requests.filter(
+          (request) => request.type === AvailabilityDayType.OFF
+        ).length,
+        timeRangeRequests: requests.filter(
+          (request) => request.workPreference === WorkPreference.TIME_RANGE
+        ).length,
+        weekdayDistribution,
+        requests
+      };
+    });
+
+    employees.sort(
+      (left, right) =>
+        right.totalRequests - left.totalRequests ||
+        `${left.lastName} ${left.firstName}`.localeCompare(
+          `${right.lastName} ${right.firstName}`,
+          "hu-HU"
+        )
+    );
+
+    return {
+      year: query.year,
+      month: query.month,
+      employees
+    };
+  }
+
   async saveMe(user: AuthUser, dto: SaveAvailabilityDto, submit: boolean) {
     if (!user.tenantId) {
       throw new ForbiddenException("TENANT_REQUIRED");
@@ -114,6 +345,11 @@ export class AvailabilityService {
     const period = this.resolvePayloadPeriod(user, dto);
     await this.ensureSubmissionWindowOpen(user, period);
     const normalizedDays = this.validateAndNormalizeDays(dto.days, period, submit);
+    const daysWithEditor = normalizedDays.map((day) => ({
+      ...day,
+      editorType: AvailabilityDayEditorType.SELF,
+      lastModifiedByUserId: user.id
+    }));
     const existing = await this.findAvailability(user.id, period);
 
     const availability = await this.prisma.availabilityWeek.upsert({
@@ -127,7 +363,7 @@ export class AvailabilityService {
         status: submit ? "SUBMITTED" : "DRAFT",
         submittedAt: submit ? new Date() : null,
         days: {
-          create: normalizedDays
+          create: daysWithEditor
         }
       },
       update: {
@@ -135,7 +371,7 @@ export class AvailabilityService {
         submittedAt: submit ? new Date() : null,
         days: {
           deleteMany: {},
-          create: normalizedDays
+          create: daysWithEditor
         }
       },
       include: { days: { orderBy: { date: "asc" } } }
@@ -194,27 +430,52 @@ export class AvailabilityService {
       include: {
         availabilityWeeks: {
           where: this.availabilityWhere(period),
-          include: { days: { orderBy: { date: "asc" } } }
+          include: {
+            days: {
+              orderBy: { date: "asc" },
+              include: {
+                lastModifiedBy: {
+                  select: { id: true, firstName: true, lastName: true }
+                }
+              }
+            }
+          }
         }
       }
     });
 
     return {
       period: this.toPeriodResponse(period),
-      users: users.map((user) => ({
-        id: user.id,
-        firstName: user.firstName,
-        lastName: user.lastName,
-        email: user.email,
-        employeeSubRole: user.employeeSubRole,
-        workerType: user.workerType,
-        contractHours: user.contractHours,
-        availability: this.toAvailabilityResponse(
-          user.availabilityWeeks[0] ?? null,
-          period,
-          false
-        )
-      }))
+      users: users.map((user) => {
+        const record = user.availabilityWeeks[0] ?? null;
+        const availability = this.toAvailabilityResponse(record, period, false);
+        const editorByDate = new Map(
+          (record?.days ?? []).map((day) => [
+            toDateOnly(day.date),
+            {
+              type: day.editorType,
+              user: day.lastModifiedBy
+            }
+          ])
+        );
+
+        return {
+          id: user.id,
+          firstName: user.firstName,
+          lastName: user.lastName,
+          email: user.email,
+          employeeSubRole: user.employeeSubRole,
+          workerType: user.workerType,
+          contractHours: user.contractHours,
+          availability: {
+            ...availability,
+            days: availability.days.map((day) => ({
+              ...day,
+              editor: editorByDate.get(day.date) ?? null
+            }))
+          }
+        };
+      })
     };
   }
 
@@ -258,6 +519,11 @@ export class AvailabilityService {
       throw new BadRequestException("DAY_REQUIRED");
     }
     const dayDate = parseDateOnly(dto.day.date);
+    const managerDay = {
+      ...normalizedDay,
+      editorType: AvailabilityDayEditorType.MANAGER,
+      lastModifiedByUserId: actor.id
+    };
     const existing = await this.findAvailability(userId, period);
     const nextStatus = existing?.status === "LOCKED" ? "LOCKED" : "SUBMITTED";
 
@@ -269,7 +535,7 @@ export class AvailabilityService {
             submittedAt: nextStatus === "SUBMITTED" ? new Date() : existing.submittedAt,
             days: {
               deleteMany: { date: dayDate },
-              create: normalizedDay
+              create: managerDay
             }
           },
           include: { days: { orderBy: { date: "asc" } } }
@@ -283,7 +549,7 @@ export class AvailabilityService {
             monthStartDate: period.monthStartDate,
             status: "SUBMITTED",
             submittedAt: new Date(),
-            days: { create: normalizedDay }
+            days: { create: managerDay }
           },
           include: { days: { orderBy: { date: "asc" } } }
         });
@@ -609,7 +875,7 @@ export class AvailabilityService {
     days: AvailabilityDayDto[],
     period: Period,
     submit: boolean
-  ): Prisma.AvailabilityDayCreateWithoutAvailabilityWeekInput[] {
+  ): NormalizedAvailabilityDay[] {
     const expectedDates = new Set(
       this.generatePeriodDates(period).map((date) => toDateOnly(date))
     );

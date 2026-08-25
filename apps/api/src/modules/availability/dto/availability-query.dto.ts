@@ -1,5 +1,14 @@
 import { EmployeeSubRole, WorkerType } from "@prisma/client";
-import { IsEnum, IsOptional, IsString } from "class-validator";
+import { Type } from "class-transformer";
+import {
+  IsDateString,
+  IsEnum,
+  IsInt,
+  IsOptional,
+  IsString,
+  Max,
+  Min
+} from "class-validator";
 
 export class MyAvailabilityQueryDto {
   @IsOptional()
@@ -27,4 +36,26 @@ export class TeamAvailabilityQueryDto extends MyAvailabilityQueryDto {
   @IsOptional()
   @IsEnum(WorkerType)
   workerType?: WorkerType;
+}
+
+export class StudentWorkCoverageReportQueryDto {
+  @IsDateString({ strict: true })
+  from!: string;
+
+  @IsDateString({ strict: true })
+  to!: string;
+}
+
+export class FullTimeRequestsReportQueryDto {
+  @Type(() => Number)
+  @IsInt()
+  @Min(2000)
+  @Max(2100)
+  year!: number;
+
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(12)
+  month!: number;
 }

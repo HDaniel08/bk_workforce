@@ -7,7 +7,9 @@ import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
 import type { AuthUser } from "../auth/types/auth-user.type";
 import { AvailabilityService } from "./availability.service";
 import {
+  FullTimeRequestsReportQueryDto,
   MyAvailabilityQueryDto,
+  StudentWorkCoverageReportQueryDto,
   TeamAvailabilityQueryDto
 } from "./dto/availability-query.dto";
 import { SaveAvailabilityDto } from "./dto/save-availability.dto";
@@ -34,6 +36,24 @@ export class AvailabilityController {
   @Roles(EmployeeSubRole.MANAGER)
   getClosedSubmissionWeeks(@CurrentUser() user: AuthUser) {
     return this.availabilityService.getClosedSubmissionWeeks(user);
+  }
+
+  @Get("reports/student-work-coverage")
+  @Roles(EmployeeSubRole.MANAGER)
+  getStudentWorkCoverageReport(
+    @CurrentUser() user: AuthUser,
+    @Query() query: StudentWorkCoverageReportQueryDto
+  ) {
+    return this.availabilityService.getStudentWorkCoverageReport(user, query);
+  }
+
+  @Get("reports/full-time-requests")
+  @Roles(EmployeeSubRole.MANAGER)
+  getFullTimeRequestsReport(
+    @CurrentUser() user: AuthUser,
+    @Query() query: FullTimeRequestsReportQueryDto
+  ) {
+    return this.availabilityService.getFullTimeRequestsReport(user, query);
   }
 
   @Post("me/save-draft")

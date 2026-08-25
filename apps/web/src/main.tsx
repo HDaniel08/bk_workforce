@@ -7,6 +7,7 @@ import { DashboardPage } from "./pages/DashboardPage";
 import { ForgotPasswordPage } from "./pages/ForgotPasswordPage";
 import { LoginPage } from "./pages/LoginPage";
 import { ManagerDashboardPage } from "./pages/ManagerDashboardPage";
+import { ManagerAvailabilityReportPage } from "./pages/ManagerAvailabilityReportPage";
 import { ManagerManagersAvailabilityPage } from "./pages/ManagerManagersAvailabilityPage";
 import { ManagerMyAvailabilityPage } from "./pages/ManagerMyAvailabilityPage";
 import { ManagerScheduleWritingPage } from "./pages/ManagerScheduleWritingPage";
@@ -125,6 +126,18 @@ const router = createBrowserRouter([
           {
             path: "/manager/my-vacation-requests",
             element: <MyVacationRequestsPage />
+          },
+          {
+            path: "/manager/reports/availability",
+            element: <Navigate to="/manager/reports/student-availability" replace />
+          },
+          {
+            path: "/manager/reports/student-availability",
+            element: <ManagerAvailabilityReportPage reportType="student" />
+          },
+          {
+            path: "/manager/reports/full-time-requests",
+            element: <ManagerAvailabilityReportPage reportType="full-time" />
           },
           {
             path: "/manager/test-email",

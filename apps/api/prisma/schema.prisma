@@ -50,6 +50,12 @@ enum AvailabilityDayType {
   WORK
 }
 
+enum AvailabilityDayEditorType {
+  SELF
+  MANAGER
+  SYSTEM
+}
+
 enum WorkPreference {
   ANYTIME
   TIME_RANGE
@@ -130,6 +136,7 @@ model User {
   createdScheduleWeeks     ScheduleWeek[]     @relation("ScheduleCreatedBy")
   shiftAssignments         ShiftAssignment[]
   passwordResetTokens      PasswordResetToken[]
+  modifiedAvailabilityDays AvailabilityDay[]     @relation("AvailabilityDayLastModifiedBy")
   createdAt                DateTime           @default(now())
   updatedAt                DateTime           @updatedAt
 
@@ -190,20 +197,24 @@ model AvailabilityWeek {
 }
 
 model AvailabilityDay {
-  id                 String              @id @default(cuid())
-  availabilityWeekId String
-  date               DateTime
-  type               AvailabilityDayType
-  workPreference     WorkPreference?
-  startTime          String?
-  endTime            String?
-  note               String?
-  availabilityWeek   AvailabilityWeek    @relation(fields: [availabilityWeekId], references: [id], onDelete: Cascade)
-  createdAt          DateTime            @default(now())
-  updatedAt          DateTime            @updatedAt
+  id                   String                    @id @default(cuid())
+  availabilityWeekId   String
+  date                 DateTime
+  type                 AvailabilityDayType
+  workPreference       WorkPreference?
+  startTime            String?
+  endTime              String?
+  note                 String?
+  editorType           AvailabilityDayEditorType @default(SYSTEM)
+  lastModifiedByUserId String?
+  availabilityWeek     AvailabilityWeek          @relation(fields: [availabilityWeekId], references: [id], onDelete: Cascade)
+  lastModifiedBy       User?                     @relation("AvailabilityDayLastModifiedBy", fields: [lastModifiedByUserId], references: [id], onDelete: SetNull)
+  createdAt            DateTime                  @default(now())
+  updatedAt            DateTime                  @updatedAt
 
   @@index([availabilityWeekId])
   @@index([date])
+  @@index([lastModifiedByUserId])
 }
 
 model VacationRequest {

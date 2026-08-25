@@ -1,8 +1,20 @@
 ﻿import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { Button } from "../ui/Button";
 import { authStore } from "../../store/auth-store";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useLocation } from "react-router-dom";
+
+type NavigationLink = {
+  to: string;
+  label: string;
+};
+
+type NavigationItem =
+  | NavigationLink
+  | {
+      label: string;
+      children: NavigationLink[];
+    };
 
 const adminItems = [
   { to: "/superadmin", label: "Dashboard" },
@@ -11,15 +23,33 @@ const adminItems = [
   { to: "/superadmin/audit-logs", label: "Audit" }
 ];
 
-const managerItems = [
+const managerItems: NavigationItem[] = [
   { to: "/manager", label: "Dashboard" },
   { to: "/manager/users", label: "Dolgozók" },
-  { to: "/manager/availability", label: "Csapat ráérés" },
+  {
+    label: "Ráérések",
+    children: [
+      { to: "/manager/availability", label: "Csapat ráérés" },
+      { to: "/manager/manager-availability", label: "Manager ráérés" },
+      { to: "/manager/my-availability", label: "Saját ráérés" },
+      { to: "/manager/vacation-requests", label: "Szabadságkérelmek" },
+      { to: "/manager/my-vacation-requests", label: "Saját szabadság" }
+    ]
+  },
+  {
+    label: "Kimutatások",
+    children: [
+      {
+        to: "/manager/reports/student-availability",
+        label: "Diákráérés report"
+      },
+      {
+        to: "/manager/reports/full-time-requests",
+        label: "Állandós kérelem report"
+      }
+    ]
+  }
   // { to: "/manager/schedule-writing", label: "Beosztásírás" },
-  { to: "/manager/manager-availability", label: "Manager ráérés" },
-  { to: "/manager/my-availability", label: "Saját ráérés" },
-  { to: "/manager/vacation-requests", label: "Szabadságkérelmek" },
-  { to: "/manager/my-vacation-requests", label: "Saját szabadság" },
   // { to: "/manager/test-email", label: "Teszt email" }
 ];
 
@@ -33,6 +63,8 @@ export function AppLayout() {
   const navigate = useNavigate();
   const location = useLocation();
   const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false);
+  const [openDesktopGroup, setOpenDesktopGroup] = useState<string | null>(null);
+  const [openMobileGroup, setOpenMobileGroup] = useState<NavigationItem | null>(null);
   const [isDesktopSidebarOpen, setIsDesktopSidebarOpen] = useState(true);
   const user = authStore.getUser();
   const items =
@@ -46,9 +78,18 @@ export function AppLayout() {
   const bottomItems = hasMoreMenu ? items.slice(0, 4) : items;
   const moreItems = hasMoreMenu ? items.slice(4) : [];
   const isMoreItemActive = moreItems.some(
-    (item) =>
-      location.pathname === item.to || location.pathname.startsWith(`${item.to}/`)
+    (item) => isNavigationItemActive(item, location.pathname)
   );
+
+  useEffect(() => {
+    const activeGroup = items.find(
+      (item) => "children" in item && isNavigationItemActive(item, location.pathname)
+    );
+
+    if (activeGroup) {
+      setOpenDesktopGroup(activeGroup.label);
+    }
+  }, [items, location.pathname]);
 
   function handleLogout() {
     authStore.logout();
@@ -102,21 +143,65 @@ export function AppLayout() {
             </button>
           </div>
           <nav className="mt-8 space-y-2">
-            {items.map((item) => (
-              <NavLink
-                key={item.to}
-                to={item.to}
-                end={item.to === "/superadmin" || item.to === "/manager"}
-                className={({ isActive }) =>
-                  [
-                    "block rounded-md px-3 py-2 text-sm font-bold transition",
-                    isActive ? "bg-brown text-cream" : "hover:bg-cream"
-                  ].join(" ")
-                }
-              >
-                {item.label}
-              </NavLink>
-            ))}
+            {items.map((item) => {
+              if (!("children" in item)) {
+                return (
+                  <NavLink
+                    key={item.to}
+                    to={item.to}
+                    end={item.to === "/superadmin" || item.to === "/manager"}
+                    className={({ isActive }) =>
+                      [
+                        "block rounded-md px-3 py-2 text-sm font-bold transition",
+                        isActive ? "bg-brown text-cream" : "hover:bg-cream"
+                      ].join(" ")
+                    }
+                  >
+                    {item.label}
+                  </NavLink>
+                );
+              }
+
+              const isOpen = openDesktopGroup === item.label;
+              const isActive = isNavigationItemActive(item, location.pathname);
+
+              return (
+                <div key={item.label}>
+                  <button
+                    type="button"
+                    aria-expanded={isOpen}
+                    className={[
+                      "flex w-full items-center justify-between rounded-md px-3 py-2 text-left text-sm font-bold transition",
+                      isActive ? "bg-brown text-cream" : "hover:bg-cream"
+                    ].join(" ")}
+                    onClick={() => setOpenDesktopGroup(isOpen ? null : item.label)}
+                  >
+                    <span>{item.label}</span>
+                    <span aria-hidden="true">{isOpen ? "−" : "+"}</span>
+                  </button>
+                  {isOpen ? (
+                    <div className="mt-1 space-y-1 border-l-2 border-brown/10 pl-3">
+                      {item.children.map((child) => (
+                        <NavLink
+                          key={child.to}
+                          to={child.to}
+                          className={({ isActive: isChildActive }) =>
+                            [
+                              "block rounded-md px-3 py-2 text-sm font-semibold transition",
+                              isChildActive
+                                ? "bg-brown/10 text-red"
+                                : "hover:bg-cream"
+                            ].join(" ")
+                          }
+                        >
+                          {child.label}
+                        </NavLink>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
+              );
+            })}
           </nav>
           <Button className="mt-8 w-full" variant="ghost" onClick={handleLogout}>
             Kijelentkezés
@@ -163,19 +248,80 @@ export function AppLayout() {
               </button>
             </div>
             <nav className="grid gap-1 sm:grid-cols-2">
-              {moreItems.map((item) => (
+              {moreItems.map((item) =>
+                "children" in item ? (
+                  <div key={item.label} className="grid gap-1">
+                    <p className="px-3 py-2 text-sm font-bold">{item.label}</p>
+                    {item.children.map((child) => (
+                      <NavLink
+                        key={child.to}
+                        to={child.to}
+                        className={({ isActive }) =>
+                          [
+                            "rounded-md px-3 py-3 text-sm font-bold transition",
+                            isActive ? "bg-brown text-cream" : "hover:bg-cream"
+                          ].join(" ")
+                        }
+                        onClick={() => setIsMoreMenuOpen(false)}
+                      >
+                        {child.label}
+                      </NavLink>
+                    ))}
+                  </div>
+                ) : (
+                  <NavLink
+                    key={item.to}
+                    to={item.to}
+                    className={({ isActive }) =>
+                      [
+                        "rounded-md px-3 py-3 text-sm font-bold transition",
+                        isActive ? "bg-brown text-cream" : "hover:bg-cream"
+                      ].join(" ")
+                    }
+                    onClick={() => setIsMoreMenuOpen(false)}
+                  >
+                    {item.label}
+                  </NavLink>
+                )
+              )}
+            </nav>
+          </div>
+        </>
+      ) : null}
+
+      {openMobileGroup && "children" in openMobileGroup ? (
+        <>
+          <button
+            type="button"
+            aria-label={`${openMobileGroup.label} menü bezárása`}
+            className="fixed inset-0 z-30 bg-brown/30 md:hidden"
+            onClick={() => setOpenMobileGroup(null)}
+          />
+          <div className="fixed inset-x-3 bottom-20 z-40 rounded-xl border border-brown/10 bg-white p-3 shadow-xl md:hidden">
+            <div className="mb-2 flex items-center justify-between px-1">
+              <p className="font-bold">{openMobileGroup.label}</p>
+              <button
+                type="button"
+                className="rounded-md px-3 py-1 text-sm font-bold hover:bg-cream"
+                onClick={() => setOpenMobileGroup(null)}
+              >
+                Bezárás
+              </button>
+            </div>
+            <nav className="grid gap-1 sm:grid-cols-2">
+              {openMobileGroup.children.map((child) => (
                 <NavLink
-                  key={item.to}
-                  to={item.to}
+                  key={child.to}
+                  to={child.to}
                   className={({ isActive }) =>
                     [
                       "rounded-md px-3 py-3 text-sm font-bold transition",
                       isActive ? "bg-brown text-cream" : "hover:bg-cream"
                     ].join(" ")
                   }
-                  onClick={() => setIsMoreMenuOpen(false)}
+                  onClick={() => setOpenMobileGroup(null)}
                 >
-                  {item.label}
+                  {child.label}
                 </NavLink>
               ))}
             </nav>
@@ -188,21 +334,43 @@ export function AppLayout() {
           hasMoreMenu ? "grid-cols-5" : "auto-cols-fr grid-flow-col"
         }`}
       >
-        {bottomItems.map((item) => (
-          <NavLink
-            key={item.to}
-            to={item.to}
-            end={item.to === "/superadmin" || item.to === "/manager"}
-            className={({ isActive }) =>
-              [
+        {bottomItems.map((item) =>
+          "children" in item ? (
+            <button
+              key={item.label}
+              type="button"
+              aria-expanded={openMobileGroup?.label === item.label}
+              className={[
                 "rounded-md px-2 py-2 text-center text-xs font-bold",
-                isActive ? "bg-brown text-cream" : "text-brown"
-              ].join(" ")
-            }
-          >
-            {item.label}
-          </NavLink>
-        ))}
+                openMobileGroup?.label === item.label ||
+                isNavigationItemActive(item, location.pathname)
+                  ? "bg-brown text-cream"
+                  : "text-brown"
+              ].join(" ")}
+              onClick={() =>
+                setOpenMobileGroup((openGroup) =>
+                  openGroup?.label === item.label ? null : item
+                )
+              }
+            >
+              {item.label}
+            </button>
+          ) : (
+            <NavLink
+              key={item.to}
+              to={item.to}
+              end={item.to === "/superadmin" || item.to === "/manager"}
+              className={({ isActive }) =>
+                [
+                  "rounded-md px-2 py-2 text-center text-xs font-bold",
+                  isActive ? "bg-brown text-cream" : "text-brown"
+                ].join(" ")
+              }
+            >
+              {item.label}
+            </NavLink>
+          )
+        )}
         {hasMoreMenu ? (
           <button
             type="button"
@@ -219,5 +387,17 @@ export function AppLayout() {
       </nav>
     </div>
   );
+}
+
+function isNavigationItemActive(item: NavigationItem, pathname: string) {
+  if ("children" in item) {
+    return item.children.some((child) => isNavigationLinkActive(child, pathname));
+  }
+
+  return isNavigationLinkActive(item, pathname);
+}
+
+function isNavigationLinkActive(item: NavigationLink, pathname: string) {
+  return pathname === item.to || pathname.startsWith(`${item.to}/`);
 }
 

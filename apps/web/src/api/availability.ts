@@ -17,6 +17,14 @@ export interface AvailabilityDay {
   startTime: string | null;
   endTime: string | null;
   note: string;
+  editor?: {
+    type: "SELF" | "MANAGER" | "SYSTEM";
+    user: {
+      id: string;
+      firstName: string;
+      lastName: string;
+    } | null;
+  } | null;
 }
 
 export interface AvailabilityPayload {
@@ -67,6 +75,48 @@ export interface AvailabilitySubmissionWeek {
   closedAt: string | null;
 }
 
+export interface StudentWorkCoverageReport {
+  from: string;
+  to: string;
+  totalStudents: number;
+  days: Array<{
+    date: string;
+    availableStudents: number;
+    recordedStudents: number;
+    totalStudents: number;
+    percentage: number;
+  }>;
+}
+
+export interface FullTimeRequestsReport {
+  year: number;
+  month: number;
+  employees: Array<{
+    userId: string;
+    firstName: string;
+    lastName: string;
+    contractHours: ContractHours | null;
+    totalRequests: number;
+    weekdayRequests: number;
+    weekendRequests: number;
+    offRequests: number;
+    timeRangeRequests: number;
+    weekdayDistribution: Array<{
+      dayOfWeek: number;
+      count: number;
+    }>;
+    requests: Array<{
+      date: string;
+      type: "OFF" | "WORK";
+      workPreference: WorkPreference | null;
+      startTime: string | null;
+      endTime: string | null;
+      note: string;
+      isWeekend: boolean;
+    }>;
+  }>;
+}
+
 export async function getMyAvailability(params: Record<string, string>) {
   const response = await api.get<MyAvailabilityResponse>("/availability/me", {
     params
@@ -84,6 +134,28 @@ export async function getOpenAvailabilitySubmissionWeeks() {
 export async function getClosedAvailabilitySubmissionWeeks() {
   const response = await api.get<AvailabilitySubmissionWeek[]>(
     "/availability/closed-submission-weeks"
+  );
+  return response.data;
+}
+
+export async function getStudentWorkCoverageReport(params: {
+  from: string;
+  to: string;
+}) {
+  const response = await api.get<StudentWorkCoverageReport>(
+    "/availability/reports/student-work-coverage",
+    { params }
+  );
+  return response.data;
+}
+
+export async function getFullTimeRequestsReport(params: {
+  year: number;
+  month: number;
+}) {
+  const response = await api.get<FullTimeRequestsReport>(
+    "/availability/reports/full-time-requests",
+    { params }
   );
   return response.data;
 }
@@ -120,9 +192,17 @@ export async function updateTeamAvailabilityDay(
     day: AvailabilityDay;
   }
 ) {
+  const day = {
+    date: payload.day.date,
+    type: payload.day.type,
+    workPreference: payload.day.workPreference,
+    startTime: payload.day.startTime,
+    endTime: payload.day.endTime,
+    note: payload.day.note
+  };
   const response = await api.post<MyAvailabilityResponse>(
     `/availability/team/${userId}/day`,
-    payload
+    { ...payload, day }
   );
   return response.data;
 }
