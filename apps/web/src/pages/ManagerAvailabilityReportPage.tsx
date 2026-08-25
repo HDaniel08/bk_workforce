@@ -1,9 +1,10 @@
-import { type FormEvent, useEffect, useState } from "react";
+import { type FormEvent, useEffect, useMemo, useState } from "react";
 import { isAxiosError } from "axios";
 import {
   getClosedAvailabilitySubmissionWeeks,
   getFullTimeRequestsReport,
   getStudentWorkCoverageReport,
+  type AvailabilitySubmissionWeek,
   type FullTimeRequestsReport,
   type StudentWorkCoverageReport
 } from "../api/availability";
@@ -16,6 +17,23 @@ const dateFormatter = new Intl.DateTimeFormat("hu-HU", {
   weekday: "long",
   timeZone: "UTC"
 });
+
+const weekDateFormatter = new Intl.DateTimeFormat("hu-HU", {
+  year: "numeric",
+  month: "short",
+  day: "numeric",
+  timeZone: "UTC"
+});
+
+const reportWeekdayNames = [
+  "Hétfő",
+  "Kedd",
+  "Szerda",
+  "Csütörtök",
+  "Péntek",
+  "Szombat",
+  "Vasárnap"
+];
 
 const monthNames = [
   "Január",
@@ -59,6 +77,14 @@ function formatDay(date: string) {
   return dateFormatter.format(new Date(`${date}T00:00:00.000Z`));
 }
 
+function formatWeek(start: string) {
+  return `${weekDateFormatter.format(new Date(`${start}T00:00:00.000Z`))} – ${weekDateFormatter.format(new Date(`${addDays(start, 6)}T00:00:00.000Z`))}`;
+}
+
+function formatAverage(value: number) {
+  return value.toLocaleString("hu-HU", { maximumFractionDigits: 1 });
+}
+
 function getReportErrorMessage(error: unknown) {
   if (isAxiosError(error)) {
     const message = error.response?.data?.message;
@@ -87,11 +113,9 @@ type ManagerAvailabilityReportPageProps = {
 export function ManagerAvailabilityReportPage({
   reportType
 }: ManagerAvailabilityReportPageProps) {
-  const [from, setFrom] = useState("");
-  const [to, setTo] = useState("");
-  const [minDate, setMinDate] = useState("");
-  const [maxDate, setMaxDate] = useState("");
-  const [report, setReport] = useState<StudentWorkCoverageReport | null>(null);
+  const [closedWeeks, setClosedWeeks] = useState<AvailabilitySubmissionWeek[]>([]);
+  const [selectedWeekStarts, setSelectedWeekStarts] = useState<string[]>([]);
+  const [studentReports, setStudentReports] = useState<StudentWorkCoverageReport[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [hasClosedWeeks, setHasClosedWeeks] = useState(true);
@@ -115,21 +139,20 @@ export function ManagerAvailabilityReportPage({
           return;
         }
 
-        const weekStarts = weeks.map((week) => week.weekStartDate).sort();
-        const initialFrom = weekStarts.at(-1);
-        const earliestFrom = weekStarts[0];
-        if (!initialFrom || !earliestFrom) {
+        const sortedWeeks = [...weeks].sort((a, b) =>
+          b.weekStartDate.localeCompare(a.weekStartDate)
+        );
+        const initialWeekStart = sortedWeeks[0]?.weekStartDate;
+        if (!initialWeekStart) {
           setHasClosedWeeks(false);
           return;
         }
-        const initialTo = addDays(initialFrom, 6);
-        setMinDate(earliestFrom);
-        setMaxDate(initialTo);
-        setFrom(initialFrom);
-        setTo(initialTo);
-        return getStudentWorkCoverageReport({ from: initialFrom, to: initialTo }).then(
-          setReport
-        );
+        setClosedWeeks(sortedWeeks);
+        setSelectedWeekStarts([initialWeekStart]);
+        return getStudentWorkCoverageReport({
+          from: initialWeekStart,
+          to: addDays(initialWeekStart, 6)
+        }).then((data) => setStudentReports([data]));
       })
       .catch((loadError) => setError(getReportErrorMessage(loadError)))
       .finally(() => setIsLoading(false));
@@ -149,23 +172,26 @@ export function ManagerAvailabilityReportPage({
       .finally(() => setIsFullTimeLoading(false));
   }, [reportType]);
 
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+  async function handleStudentSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError(null);
 
-    if (!from || !to) {
-      setError("Add meg a kezdő- és végdátumot.");
-      return;
-    }
-
-    if (from > to) {
-      setError("A kezdődátum nem lehet későbbi a végdátumnál.");
+    if (selectedWeekStarts.length === 0) {
+      setError("Válassz ki legalább egy lezárt hetet.");
       return;
     }
 
     setIsLoading(true);
     try {
-      setReport(await getStudentWorkCoverageReport({ from, to }));
+      const data = await Promise.all(
+        selectedWeekStarts.map((weekStart) =>
+          getStudentWorkCoverageReport({
+            from: weekStart,
+            to: addDays(weekStart, 6)
+          })
+        )
+      );
+      setStudentReports(data);
     } catch (loadError) {
       setError(getReportErrorMessage(loadError));
     } finally {
@@ -200,6 +226,26 @@ export function ManagerAvailabilityReportPage({
     (employee) => employee.userId === selectedFullTimeUserId
   );
 
+  const studentChartDays = useMemo(
+    () =>
+      reportWeekdayNames.map((name, dayIndex) => {
+        const reportsForDay = studentReports
+          .map((studentReport) => studentReport.days[dayIndex])
+          .filter((day) => day !== undefined);
+        const divisor = reportsForDay.length || 1;
+        const averageAvailable =
+          reportsForDay.reduce((sum, day) => sum + day.availableStudents, 0) /
+          divisor;
+        const averageTotal =
+          reportsForDay.reduce((sum, day) => sum + day.totalStudents, 0) / divisor;
+        const percentage =
+          reportsForDay.reduce((sum, day) => sum + day.percentage, 0) / divisor;
+
+        return { name, averageAvailable, averageTotal, percentage };
+      }),
+    [studentReports]
+  );
+
   return (
     <section className="space-y-5">
       <div>
@@ -229,34 +275,73 @@ export function ManagerAvailabilityReportPage({
           {hasClosedWeeks ? (
             <>
               <form
-                className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-end"
-                onSubmit={handleSubmit}
+                className="mt-5"
+                onSubmit={handleStudentSubmit}
               >
-                <label className="grid gap-1 text-sm font-bold">
-                  Ettől
-                  <input
-                    type="date"
-                    value={from}
-                    min={minDate}
-                    max={maxDate}
-                    className="rounded-md border border-brown/20 bg-white px-3 py-2 font-normal"
-                    onChange={(event) => setFrom(event.target.value)}
-                  />
-                </label>
-                <label className="grid gap-1 text-sm font-bold">
-                  Eddig
-                  <input
-                    type="date"
-                    value={to}
-                    min={from || minDate}
-                    max={maxDate}
-                    className="rounded-md border border-brown/20 bg-white px-3 py-2 font-normal"
-                    onChange={(event) => setTo(event.target.value)}
-                  />
-                </label>
-                <Button type="submit" disabled={isLoading}>
-                  {isLoading ? "Betöltés..." : "Kimutatás"}
-                </Button>
+                <fieldset>
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <legend className="text-sm font-bold">Lezárt hetek</legend>
+                    <div className="flex gap-3 text-xs font-bold">
+                      <button
+                        type="button"
+                        className="text-red hover:underline"
+                        onClick={() =>
+                          setSelectedWeekStarts(
+                            closedWeeks.map((week) => week.weekStartDate)
+                          )
+                        }
+                      >
+                        Összes kijelölése
+                      </button>
+                      <button
+                        type="button"
+                        className="text-brown/60 hover:underline"
+                        onClick={() => setSelectedWeekStarts([])}
+                      >
+                        Kijelölés törlése
+                      </button>
+                    </div>
+                  </div>
+                  <div className="mt-2 grid max-h-52 gap-2 overflow-y-auto rounded-md border border-brown/15 bg-cream/40 p-3 sm:grid-cols-2 lg:grid-cols-3">
+                    {closedWeeks.map((week) => {
+                      const isSelected = selectedWeekStarts.includes(week.weekStartDate);
+                      return (
+                        <label
+                          key={week.weekStartDate}
+                          className={`flex cursor-pointer items-center gap-2 rounded-md border px-3 py-2 text-sm transition ${
+                            isSelected
+                              ? "border-red/40 bg-white font-bold"
+                              : "border-transparent bg-white/60 text-brown/70"
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            className="accent-red"
+                            onChange={() =>
+                              setSelectedWeekStarts((current) =>
+                                isSelected
+                                  ? current.filter(
+                                      (weekStart) => weekStart !== week.weekStartDate
+                                    )
+                                  : [...current, week.weekStartDate]
+                              )
+                            }
+                          />
+                          {formatWeek(week.weekStartDate)}
+                        </label>
+                      );
+                    })}
+                  </div>
+                </fieldset>
+                <div className="mt-3 flex items-center gap-3">
+                  <Button type="submit" disabled={isLoading}>
+                    {isLoading ? "Betöltés..." : "Kimutatás frissítése"}
+                  </Button>
+                  <span className="text-sm text-brown/60">
+                    {selectedWeekStarts.length} hét kiválasztva
+                  </span>
+                </div>
               </form>
 
               {error ? (
@@ -265,60 +350,56 @@ export function ManagerAvailabilityReportPage({
                 </p>
               ) : null}
 
-              {report ? (
+              {studentReports.length > 0 ? (
                 <div className="mt-6">
                   <div className="mb-4 flex flex-wrap gap-3 text-sm">
                     <span className="rounded-full bg-cream px-3 py-1 font-bold">
-                      {report.totalStudents} aktív diák
+                      {formatAverage(studentChartDays[0]?.averageTotal ?? 0)} aktív diák
                     </span>
                     <span className="rounded-full bg-cream px-3 py-1">
-                      {report.from} – {report.to}
+                      {studentReports.length === 1
+                        ? "1 lezárt hét"
+                        : `${studentReports.length} lezárt hét átlaga`}
                     </span>
                   </div>
 
                   <div className="overflow-x-auto">
-                    <table className="w-full min-w-[620px] border-collapse text-sm">
-                      <thead>
-                        <tr className="border-b border-brown/15 text-left">
-                          <th className="px-2 py-3">Nap</th>
-                          <th className="px-2 py-3 text-center">Vállalta</th>
-                          <th className="px-2 py-3 text-center">Rögzítve</th>
-                          <th className="w-2/5 px-2 py-3">Arány</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {report.days.map((day) => (
-                          <tr key={day.date} className="border-b border-brown/10 last:border-0">
-                            <th className="px-2 py-3 text-left font-semibold capitalize">
-                              {formatDay(day.date)}
-                            </th>
-                            <td className="px-2 py-3 text-center font-bold">
-                              {day.availableStudents} / {day.totalStudents} fő
-                            </td>
-                            <td className="px-2 py-3 text-center text-brown/70">
-                              {day.recordedStudents} / {day.totalStudents} fő
-                            </td>
-                            <td className="px-2 py-3">
-                              <div className="flex items-center gap-3">
-                                <div className="h-3 flex-1 overflow-hidden rounded-full bg-cream">
-                                  <div
-                                    className="h-full rounded-full bg-red"
-                                    style={{ width: `${day.percentage}%` }}
-                                  />
-                                </div>
-                                <span className="w-11 text-right font-bold">
-                                  {day.percentage}%
-                                </span>
+                    <div className="min-w-[700px] rounded-xl border border-brown/10 bg-cream/30 px-5 pb-4 pt-6">
+                      <div className="grid h-72 grid-cols-7 gap-3 border-b border-brown/15">
+                        {studentChartDays.map((day) => (
+                          <div
+                            key={day.name}
+                            className="flex min-w-0 flex-col items-center justify-end"
+                          >
+                            <div className="mb-2 text-center">
+                              <div className="font-bold text-brown">
+                                {formatAverage(day.averageAvailable)} fő
                               </div>
-                            </td>
-                          </tr>
+                              <div className="text-xs font-bold text-red">
+                                {formatAverage(day.percentage)}%
+                              </div>
+                            </div>
+                            <div className="flex h-48 w-full max-w-16 items-end overflow-hidden rounded-t-md bg-brown/5">
+                              <div
+                                className="w-full rounded-t-md bg-red transition-[height] duration-300"
+                                style={{ height: `${day.percentage}%` }}
+                                title={`${day.name}: ${formatAverage(day.averageAvailable)} / ${formatAverage(day.averageTotal)} fő (${formatAverage(day.percentage)}%)`}
+                              />
+                            </div>
+                          </div>
                         ))}
-                      </tbody>
-                    </table>
+                      </div>
+                      <div className="grid grid-cols-7 gap-3 pt-3 text-center text-xs font-bold sm:text-sm">
+                        {studentChartDays.map((day) => (
+                          <span key={day.name}>{day.name}</span>
+                        ))}
+                      </div>
+                    </div>
                   </div>
                   <p className="mt-4 text-xs text-brown/60">
-                    A „Vállalta” oszlop a WORK napokat, a „Rögzítve” oszlop az
-                    adott napra mentett bármilyen ráérési adatot számolja.
+                    Az oszlopok azt mutatják, hogy az aktív diákok közül az adott
+                    hétköznapon hányan vállaltak bármilyen műszakot. Több hét
+                    kiválasztásakor a létszám és az arány a kiválasztott hetek átlaga.
                   </p>
                 </div>
               ) : null}
@@ -491,24 +572,41 @@ export function ManagerAvailabilityReportPage({
                           {selectedFullTimeEmployee.requests.map((request) => (
                             <div
                               key={request.date}
-                              className="flex flex-col gap-1 rounded-md border border-brown/10 px-3 py-2 text-sm sm:flex-row sm:items-center"
+                              className="grid gap-3 rounded-md border border-brown/10 px-3 py-3 text-sm sm:grid-cols-[minmax(140px,1fr)_minmax(170px,1fr)_minmax(180px,1.4fr)_auto] sm:items-center"
                             >
-                              <span className="font-bold">{formatDay(request.date)}</span>
-                              <span className="sm:ml-auto">
-                                {request.type === "OFF"
-                                  ? "Pihenőnap"
-                                  : `${request.startTime ?? "--:--"}–${request.endTime ?? "--:--"}`}
+                              <div>
+                                <span className="block text-[11px] font-bold uppercase tracking-wide text-brown/50">
+                                  Dátum
+                                </span>
+                                <span className="font-bold">{formatDay(request.date)}</span>
+                              </div>
+                              <div>
+                                <span className="block text-[11px] font-bold uppercase tracking-wide text-brown/50">
+                                  Kérvény típusa
+                                </span>
+                                <span className="font-semibold">
+                                  {request.type === "OFF"
+                                    ? "Pihenőnap"
+                                    : `Idősáv · ${request.startTime ?? "--:--"}–${request.endTime ?? "--:--"}`}
+                                </span>
+                              </div>
+                              <div>
+                                <span className="block text-[11px] font-bold uppercase tracking-wide text-brown/50">
+                                  Megjegyzés
+                                </span>
+                                <span className={request.note ? "text-brown/70" : "text-brown/40"}>
+                                  {request.note ?? "Nincs megjegyzés"}
+                                </span>
+                              </div>
+                              <span
+                                className={`w-fit rounded-full px-2 py-0.5 text-xs font-bold sm:justify-self-end ${
+                                  request.isWeekend
+                                    ? "bg-red/10 text-red"
+                                    : "bg-green/10 text-green"
+                                }`}
+                              >
+                                {request.isWeekend ? "Hétvége" : "Hétköznap"}
                               </span>
-                              {request.isWeekend ? (
-                                <span className="w-fit rounded-full bg-red/10 px-2 py-0.5 text-xs font-bold text-red">
-                                  Hétvége
-                                </span>
-                              ) : null}
-                              {request.note ? (
-                                <span className="text-xs text-brown/60 sm:basis-full">
-                                  {request.note}
-                                </span>
-                              ) : null}
                             </div>
                           ))}
                         </div>
