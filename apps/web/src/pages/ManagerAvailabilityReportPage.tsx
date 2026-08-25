@@ -94,9 +94,6 @@ function getReportErrorMessage(error: unknown) {
     if (message === "REPORT_FROM_AFTER_TO") {
       return "A kezdődátum nem lehet későbbi a végdátumnál.";
     }
-    if (message === "REPORT_RANGE_AFTER_CURRENT_WEEK") {
-      return "A kimutatás legfeljebb az aktuális hét végéig kérhető le.";
-    }
   }
 
   return "A kimutatás betöltése nem sikerült.";

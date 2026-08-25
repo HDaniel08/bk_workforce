@@ -130,10 +130,6 @@ export class AvailabilityService {
       throw new BadRequestException("REPORT_FROM_AFTER_TO");
     }
 
-    if (to > getWeekEnd(new Date())) {
-      throw new BadRequestException("REPORT_RANGE_AFTER_CURRENT_WEEK");
-    }
-
     const weekStarts: Date[] = [];
     const lastWeekStart = getWeekStart(to);
     for (
