@@ -7,6 +7,7 @@ import { DashboardPage } from "./pages/DashboardPage";
 import { ForgotPasswordPage } from "./pages/ForgotPasswordPage";
 import { LoginPage } from "./pages/LoginPage";
 import { ManagerDashboardPage } from "./pages/ManagerDashboardPage";
+import { ManagerHandoversPage } from "./pages/ManagerHandoversPage";
 import { ManagerAvailabilityReportPage } from "./pages/ManagerAvailabilityReportPage";
 import { ManagerManagersAvailabilityPage } from "./pages/ManagerManagersAvailabilityPage";
 import { ManagerMyAvailabilityPage } from "./pages/ManagerMyAvailabilityPage";
@@ -94,6 +95,10 @@ const router = createBrowserRouter([
           {
             path: "/manager/users",
             element: <ManagerUsersPage />
+          },
+          {
+            path: "/manager/handovers",
+            element: <ManagerHandoversPage />
           },
           {
             path: "/manager/schedules",

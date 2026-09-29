@@ -1,8 +1,15 @@
 ﻿import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { Button } from "../ui/Button";
 import { authStore } from "../../store/auth-store";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useLocation } from "react-router-dom";
+import {
+  getNotifications,
+  markAllNotificationsRead,
+  markNotificationRead,
+  type AppNotification,
+  type NotificationsResponse
+} from "../../api/notifications";
 
 type NavigationLink = {
   to: string;
@@ -25,6 +32,7 @@ const adminItems = [
 
 const managerItems: NavigationItem[] = [
   { to: "/manager", label: "Dashboard" },
+  { to: "/manager/handovers", label: "Átadó" },
   { to: "/manager/users", label: "Dolgozók" },
   {
     label: "Ráérések",
@@ -66,6 +74,11 @@ export function AppLayout() {
   const [openDesktopGroup, setOpenDesktopGroup] = useState<string | null>(null);
   const [openMobileGroup, setOpenMobileGroup] = useState<NavigationItem | null>(null);
   const [isDesktopSidebarOpen, setIsDesktopSidebarOpen] = useState(true);
+  const [isNotificationPanelOpen, setIsNotificationPanelOpen] = useState(false);
+  const [notifications, setNotifications] = useState<NotificationsResponse>({
+    unreadCount: 0,
+    items: []
+  });
   const user = authStore.getUser();
   const items =
     user?.role === "ADMIN"
@@ -91,9 +104,82 @@ export function AppLayout() {
     }
   }, [items, location.pathname]);
 
+  const refreshNotifications = useCallback(async () => {
+    try {
+      setNotifications(await getNotifications());
+    } catch {
+      // A globális API interceptor kezeli a lejárt munkamenetet.
+    }
+  }, []);
+
+  useEffect(() => {
+    void refreshNotifications();
+    const intervalId = window.setInterval(() => void refreshNotifications(), 30_000);
+    const handleVisibility = () => {
+      if (document.visibilityState === "visible") void refreshNotifications();
+    };
+    document.addEventListener("visibilitychange", handleVisibility);
+    return () => {
+      window.clearInterval(intervalId);
+      document.removeEventListener("visibilitychange", handleVisibility);
+    };
+  }, [refreshNotifications]);
+
   function handleLogout() {
     authStore.logout();
     navigate("/login", { replace: true });
+  }
+
+  async function openNotification(notification: AppNotification) {
+    if (!notification.readAt) {
+      await markNotificationRead(notification.id).catch(() => undefined);
+    }
+    setIsNotificationPanelOpen(false);
+    await refreshNotifications();
+    if (notification.handoverDate && notification.handoverPostId) {
+      const params = new URLSearchParams({
+        date: notification.handoverDate,
+        post: notification.handoverPostId
+      });
+      if (notification.handoverReplyId) params.set("reply", notification.handoverReplyId);
+      navigate(`/manager/handovers?${params.toString()}`);
+    }
+  }
+
+  async function markAllRead() {
+    await markAllNotificationsRead();
+    await refreshNotifications();
+  }
+
+  function notificationButton() {
+    return (
+      <button
+        type="button"
+        className="fixed right-3 top-3 z-30 flex h-11 w-11 items-center justify-center rounded-full border border-cream/30 bg-brown text-cream shadow-xl transition hover:scale-105 hover:bg-red focus:outline-none focus:ring-2 focus:ring-red/30 md:right-6 md:top-5"
+        aria-label={`Értesítések${notifications.unreadCount ? `, ${notifications.unreadCount} olvasatlan` : ""}`}
+        title="Értesítések"
+        onClick={() => setIsNotificationPanelOpen(true)}
+      >
+        <svg
+          aria-hidden="true"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.8"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          className="h-6 w-6"
+        >
+          <path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9" />
+          <path d="M10 21h4" />
+        </svg>
+        {notifications.unreadCount > 0 ? (
+          <span className="absolute -right-1 -top-1 flex min-h-5 min-w-5 items-center justify-center rounded-full border-2 border-cream bg-red px-1 text-[10px] font-black text-white">
+            {notifications.unreadCount > 9 ? "9+" : notifications.unreadCount}
+          </span>
+        ) : null}
+      </button>
+    );
   }
 
   return (
@@ -105,7 +191,9 @@ export function AppLayout() {
           : "md:grid-cols-[0_1fr]"
       ].join(" ")}
     >
-      <header className="sticky top-0 z-20 flex items-center justify-between gap-3 border-b border-brown/10 bg-white/95 px-4 py-3 backdrop-blur md:hidden">
+      {notificationButton()}
+
+      <header className="sticky top-0 z-20 flex items-center justify-between gap-3 border-b border-brown/10 bg-white/95 px-4 py-3 pr-16 backdrop-blur md:hidden">
         <div className="min-w-0">
           <p className="text-xs font-bold uppercase tracking-wide text-red">BK Workforce</p>
           <p className="truncate text-sm font-bold">{userName}</p>
@@ -131,16 +219,18 @@ export function AppLayout() {
               </p>
               <h1 className="mt-1 truncate text-xl font-bold">{userName}</h1>
             </div>
-            <button
-              type="button"
-              aria-label="Oldalsó navigáció becsukása"
-              aria-expanded={isDesktopSidebarOpen}
-              title="Oldalsáv becsukása"
-              className="shrink-0 rounded-md px-2 py-1 text-lg font-bold transition hover:bg-cream"
-              onClick={() => setIsDesktopSidebarOpen(false)}
-            >
-              ←
-            </button>
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                aria-label="Oldalsó navigáció becsukása"
+                aria-expanded={isDesktopSidebarOpen}
+                title="Oldalsáv becsukása"
+                className="shrink-0 rounded-md px-2 py-1 text-lg font-bold transition hover:bg-cream"
+                onClick={() => setIsDesktopSidebarOpen(false)}
+              >
+                ←
+              </button>
+            </div>
           </div>
           <nav className="mt-8 space-y-2">
             {items.map((item) => {
@@ -211,7 +301,7 @@ export function AppLayout() {
 
       <div className="pb-20 md:pb-0">
         {!isDesktopSidebarOpen ? (
-          <div className="hidden px-4 pt-4 md:block">
+          <div className="hidden items-center gap-2 px-4 pt-4 md:flex">
             <button
               type="button"
               aria-label="Oldalsó navigáció kinyitása"
@@ -227,6 +317,46 @@ export function AppLayout() {
           <Outlet />
         </main>
       </div>
+
+      {isNotificationPanelOpen ? (
+        <>
+          <button
+            type="button"
+            aria-label="Értesítések bezárása"
+            className="fixed inset-0 z-40 bg-brown/30"
+            onClick={() => setIsNotificationPanelOpen(false)}
+          />
+          <aside className="fixed inset-y-0 right-0 z-50 flex w-full max-w-sm flex-col bg-white shadow-2xl" aria-label="Értesítések">
+            <div className="flex items-center justify-between gap-3 border-b border-brown/10 px-4 py-4">
+              <div>
+                <h2 className="text-xl font-black">Értesítések</h2>
+                <p className="text-xs text-brown/55">{notifications.unreadCount} olvasatlan</p>
+              </div>
+              <button type="button" className="rounded-md px-3 py-2 text-sm font-bold hover:bg-cream" onClick={() => setIsNotificationPanelOpen(false)}>Bezárás</button>
+            </div>
+            {notifications.unreadCount > 0 ? (
+              <div className="border-b border-brown/10 px-4 py-2 text-right">
+                <button type="button" className="text-xs font-bold text-red hover:underline" onClick={() => void markAllRead()}>Mind olvasott</button>
+              </div>
+            ) : null}
+            <div className="flex-1 overflow-y-auto">
+              {notifications.items.length === 0 ? (
+                <div className="px-5 py-12 text-center">
+                  <p className="font-bold">Nincs értesítésed.</p>
+                  <p className="mt-1 text-sm text-brown/55">Az új megjelölések és válaszok itt jelennek meg.</p>
+                </div>
+              ) : (
+                <>
+                  {notifications.items.some((item) => !item.readAt) ? <p className="px-4 pb-1 pt-4 text-xs font-black uppercase tracking-wide text-brown/45">Olvasatlan</p> : null}
+                  {notifications.items.filter((item) => !item.readAt).map((notification) => renderNotification(notification, openNotification))}
+                  {notifications.items.some((item) => item.readAt) ? <p className="px-4 pb-1 pt-5 text-xs font-black uppercase tracking-wide text-brown/45">Ma olvasott</p> : null}
+                  {notifications.items.filter((item) => item.readAt).map((notification) => renderNotification(notification, openNotification))}
+                </>
+              )}
+            </div>
+          </aside>
+        </>
+      ) : null}
 
       {isMoreMenuOpen ? (
         <>
@@ -387,6 +517,49 @@ export function AppLayout() {
       </nav>
     </div>
   );
+}
+
+function renderNotification(
+  notification: AppNotification,
+  onOpen: (notification: AppNotification) => Promise<void>
+) {
+  const actorName = `${notification.actor.lastName} ${notification.actor.firstName}`;
+  const action =
+    notification.type === "HANDOVER_REPLY"
+      ? "válaszolt az átadóposztodra"
+      : notification.handoverReplyId
+        ? "megjelölt egy válaszban"
+        : "megjelölt egy átadóposztban";
+  const snippet = notification.snippet
+    .replace(/(^|\s)#[\p{L}\p{N}_-]{1,50}/gu, "$1")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  return (
+    <button
+      key={notification.id}
+      type="button"
+      className={`flex w-full gap-3 border-b border-brown/10 px-4 py-3 text-left transition hover:bg-cream ${notification.readAt ? "bg-white" : "bg-red/5"}`}
+      onClick={() => void onOpen(notification)}
+    >
+      <span className={`mt-1 h-2.5 w-2.5 shrink-0 rounded-full ${notification.readAt ? "bg-brown/15" : "bg-red"}`} />
+      <span className="min-w-0">
+        <span className="block text-sm"><strong>{actorName}</strong> {action}.</span>
+        {snippet ? <span className="mt-1 block truncate text-xs text-brown/60">„{snippet}”</span> : null}
+        <span className="mt-1 block text-[11px] text-brown/45">{formatNotificationTime(notification.createdAt)}</span>
+      </span>
+    </button>
+  );
+}
+
+function formatNotificationTime(value: string) {
+  return new Intl.DateTimeFormat("hu-HU", {
+    timeZone: "Europe/Budapest",
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit"
+  }).format(new Date(value));
 }
 
 function isNavigationItemActive(item: NavigationItem, pathname: string) {

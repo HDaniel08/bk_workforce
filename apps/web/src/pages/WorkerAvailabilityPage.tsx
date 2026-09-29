@@ -26,6 +26,47 @@ interface PendingSave {
   boundary: MissingTimeBoundary;
 }
 
+type ShiftPreset = "OPENING" | "MIDDLE" | "CLOSING";
+
+const shiftPresets: Array<{
+  value: ShiftPreset;
+  label: string;
+  startTime: string;
+  endTime: string;
+  startMinutes: number;
+  endMinutes: number;
+}> = [
+  { value: "OPENING", label: "Nyitás", startTime: "07:00", endTime: "15:30", startMinutes: 7 * 60, endMinutes: 15 * 60 + 30 },
+  { value: "MIDDLE", label: "Köztes", startTime: "11:00", endTime: "19:30", startMinutes: 11 * 60, endMinutes: 19 * 60 + 30 },
+  { value: "CLOSING", label: "Zárás", startTime: "17:00", endTime: "01:00", startMinutes: 17 * 60, endMinutes: 25 * 60 }
+];
+
+function inferShiftPresets(day: AvailabilityDay): ShiftPreset[] {
+  const matchingCombination = [
+    ["OPENING"],
+    ["MIDDLE"],
+    ["CLOSING"],
+    ["OPENING", "MIDDLE"],
+    ["MIDDLE", "CLOSING"],
+    ["OPENING", "CLOSING"]
+  ].find((combination) => {
+    const times = getPresetTimeRange(combination as ShiftPreset[]);
+    return times.startTime === day.startTime && times.endTime === day.endTime;
+  });
+  return (matchingCombination as ShiftPreset[] | undefined) ?? [];
+}
+
+function getPresetTimeRange(selected: ShiftPreset[]) {
+  const presets = shiftPresets.filter((preset) => selected.includes(preset.value));
+  const first = presets.reduce((earliest, preset) =>
+    preset.startMinutes < earliest.startMinutes ? preset : earliest
+  );
+  const last = presets.reduce((latest, preset) =>
+    preset.endMinutes > latest.endMinutes ? preset : latest
+  );
+  return { startTime: first.startTime, endTime: last.endTime };
+}
+
 function formatWeekLabel(weekStartDate: string) {
   const start = new Date(`${weekStartDate}T00:00:00`);
   const end = new Date(start);
@@ -82,6 +123,7 @@ export function WorkerAvailabilityPage() {
   const [status, setStatus] = useState("DRAFT");
   const [message, setMessage] = useState<string | null>(null);
   const [editingDay, setEditingDay] = useState<AvailabilityDay | null>(null);
+  const [selectedShiftPresets, setSelectedShiftPresets] = useState<ShiftPreset[]>([]);
   const [pendingSave, setPendingSave] = useState<PendingSave | null>(null);
 
   async function loadOpenWeeks() {
@@ -121,6 +163,26 @@ export function WorkerAvailabilityPage() {
       currentDays.map((item) => (item.date === day.date ? day : item))
     );
     setEditingDay(day);
+  }
+
+  function openDayEditor(day: AvailabilityDay) {
+    const editableDay = {
+      ...day,
+      type: day.type === "VACATION" ? "OFF" as const : day.type
+    };
+    setEditingDay(editableDay);
+    setSelectedShiftPresets(inferShiftPresets(editableDay));
+  }
+
+  function toggleShiftPreset(preset: ShiftPreset) {
+    if (!editingDay) return;
+    const next = selectedShiftPresets.includes(preset)
+      ? selectedShiftPresets.filter((item) => item !== preset)
+      : [...selectedShiftPresets, preset];
+    setSelectedShiftPresets(next);
+    if (next.length === 0) return;
+    const timeRange = getPresetTimeRange(next);
+    updateDay({ ...editingDay, ...timeRange });
   }
 
   async function persist(daysToSave: AvailabilityDay[], submit: boolean) {
@@ -225,12 +287,7 @@ export function WorkerAvailabilityPage() {
                   <button
                     className={`min-h-11 flex-1 rounded-md px-3 py-2 text-center text-xs font-bold leading-tight transition hover:ring-2 hover:ring-red/30 ${style.className}`}
                     type="button"
-                    onClick={() =>
-                      setEditingDay({
-                        ...day,
-                        type: day.type === "VACATION" ? "OFF" : day.type
-                      })
-                    }
+                    onClick={() => openDayEditor(day)}
                   >
                     <span>{style.label}</span>
                     {day.note ? (
@@ -269,12 +326,7 @@ export function WorkerAvailabilityPage() {
                         <button
                           className={`min-h-10 w-full rounded-md px-1.5 py-1 text-center text-xs font-bold leading-tight transition hover:ring-2 hover:ring-red/30 ${style.className}`}
                           type="button"
-                          onClick={() =>
-                            setEditingDay({
-                              ...day,
-                              type: day.type === "VACATION" ? "OFF" : day.type
-                            })
-                          }
+                          onClick={() => openDayEditor(day)}
                         >
                           <span>{style.label}</span>
                           {day.note ? (
@@ -298,13 +350,25 @@ export function WorkerAvailabilityPage() {
       )}
 
       {message ? <p className="font-semibold text-green">{message}</p> : null}
-      <div className="flex flex-col gap-2 sm:flex-row">
+      <div className="flex items-center gap-2">
         <Button disabled={!canEdit} onClick={() => save(false)}>
-          Mentés piszkozatként
+          Mentés
         </Button>
-        <Button disabled={!canEdit} variant="secondary" onClick={() => save(true)}>
-          Leadás
-        </Button>
+        <div className="group relative">
+          <button
+            type="button"
+            aria-label="Információ a ráérés mentéséről"
+            className="flex h-7 w-7 items-center justify-center rounded-full border border-brown/25 bg-white text-sm font-black text-brown transition hover:border-red hover:text-red focus:border-red focus:text-red focus:outline-none"
+          >
+            ?
+          </button>
+          <div
+            role="tooltip"
+            className="pointer-events-none absolute -left-20 bottom-full z-20 mb-2 hidden w-64 rounded-md bg-brown px-3 py-2 text-center text-xs font-semibold leading-5 text-cream shadow-xl group-hover:block group-focus-within:block sm:left-1/2 sm:w-72 sm:-translate-x-1/2"
+          >
+            A ráérés addig módosítható és újramenthető, amíg a manager le nem zárja a hetet.
+          </div>
+        </div>
       </div>
 
       {editingDay ? (
@@ -315,62 +379,110 @@ export function WorkerAvailabilityPage() {
                 {formatDate(editingDay.date)} · {formatDayName(editingDay.date)}
               </h3>
             </div>
-            <Select
-              label="Nap típusa"
-              value={editingDay.type}
-              onChange={(event) => {
-                const type = event.target.value as AvailabilityDay["type"];
-                updateDay({
-                  ...editingDay,
-                  type,
-                  workPreference: type === "WORK" ? editingDay.workPreference ?? "ANYTIME" : null,
-                  startTime: null,
-                  endTime: null
-                });
-              }}
-              options={[
-                { value: "OFF", label: "Pihenőnap" },
-                { value: "WORK", label: "Munka" }
-              ]}
-            />
+            <fieldset>
+              <legend className="mb-2 text-sm font-semibold">Nap típusa</legend>
+              <div className="grid grid-cols-2 gap-2">
+                {[
+                  { value: "WORK", label: "Munka" },
+                  { value: "OFF", label: "Pihenőnap" }
+                ].map((option) => (
+                  <label key={option.value} className="flex cursor-pointer items-center gap-2 px-1 py-1.5 text-sm font-bold">
+                    <input
+                      type="radio"
+                      name="availability-day-type"
+                      value={option.value}
+                      checked={editingDay.type === option.value}
+                      onChange={() => {
+                        const type = option.value as AvailabilityDay["type"];
+                        setSelectedShiftPresets([]);
+                        updateDay({
+                          ...editingDay,
+                          type,
+                          workPreference: type === "WORK" ? editingDay.workPreference ?? "ANYTIME" : null,
+                          startTime: null,
+                          endTime: null
+                        });
+                      }}
+                      className="h-4 w-4 accent-red"
+                    />
+                    {option.label}
+                  </label>
+                ))}
+              </div>
+            </fieldset>
             {editingDay.type === "WORK" ? (
-              <Select
-                label="Munka preferencia"
-                value={editingDay.workPreference ?? "ANYTIME"}
-                onChange={(event) => {
-                  const workPreference = event.target
-                    .value as AvailabilityDay["workPreference"];
-                  updateDay({
-                    ...editingDay,
-                    workPreference,
-                    startTime: workPreference === "TIME_RANGE" ? editingDay.startTime : null,
-                    endTime: workPreference === "TIME_RANGE" ? editingDay.endTime : null
-                  });
-                }}
-                options={[
-                  { value: "ANYTIME", label: "Bárhogy" },
-                  { value: "TIME_RANGE", label: "Időponttal" }
-                ]}
-              />
+              <fieldset>
+                <legend className="mb-2 text-sm font-semibold">Munka preferencia</legend>
+                <div className="grid grid-cols-2 gap-2">
+                  {[
+                    { value: "ANYTIME", label: "Bárhogy" },
+                    { value: "TIME_RANGE", label: "Időpont" }
+                  ].map((option) => (
+                    <label key={option.value} className="flex cursor-pointer items-center gap-2 px-1 py-1.5 text-sm font-bold">
+                      <input
+                        type="radio"
+                        name="availability-work-preference"
+                        value={option.value}
+                        checked={(editingDay.workPreference ?? "ANYTIME") === option.value}
+                        onChange={() => {
+                          const workPreference = option.value as AvailabilityDay["workPreference"];
+                          setSelectedShiftPresets([]);
+                          updateDay({
+                            ...editingDay,
+                            workPreference,
+                            startTime: workPreference === "TIME_RANGE" ? editingDay.startTime : null,
+                            endTime: workPreference === "TIME_RANGE" ? editingDay.endTime : null
+                          });
+                        }}
+                        className="h-4 w-4 accent-red"
+                      />
+                      {option.label}
+                    </label>
+                  ))}
+                </div>
+              </fieldset>
             ) : null}
             {editingDay.type === "WORK" && editingDay.workPreference === "TIME_RANGE" ? (
-              <div className="grid gap-3 sm:grid-cols-2">
-                <Input
-                  label="Kezdés"
-                  type="time"
-                  value={editingDay.startTime ?? ""}
-                  onChange={(event) =>
-                    updateDay({ ...editingDay, startTime: event.target.value })
-                  }
-                />
-                <Input
-                  label="Végzés"
-                  type="time"
-                  value={editingDay.endTime ?? ""}
-                  onChange={(event) =>
-                    updateDay({ ...editingDay, endTime: event.target.value })
-                  }
-                />
+              <div className="space-y-3">
+                <fieldset>
+                  <legend className="mb-2 text-sm font-semibold">Gyors időpontok</legend>
+                  <div className="grid grid-cols-3 gap-2">
+                    {shiftPresets.map((preset) => {
+                      const selected = selectedShiftPresets.includes(preset.value);
+                      return (
+                        <button
+                          key={preset.value}
+                          type="button"
+                          aria-pressed={selected}
+                          className={`rounded-md border px-2 py-2 text-sm font-bold transition ${selected ? "border-green bg-green text-white" : "border-brown/15 bg-white hover:bg-cream"}`}
+                          onClick={() => toggleShiftPreset(preset.value)}
+                        >
+                          {preset.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </fieldset>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <Input
+                    label="Kezdés"
+                    type="time"
+                    value={editingDay.startTime ?? ""}
+                    onChange={(event) => {
+                      setSelectedShiftPresets([]);
+                      updateDay({ ...editingDay, startTime: event.target.value });
+                    }}
+                  />
+                  <Input
+                    label="Végzés"
+                    type="time"
+                    value={editingDay.endTime ?? ""}
+                    onChange={(event) => {
+                      setSelectedShiftPresets([]);
+                      updateDay({ ...editingDay, endTime: event.target.value });
+                    }}
+                  />
+                </div>
               </div>
             ) : null}
             <Input

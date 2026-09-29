@@ -4,7 +4,9 @@ import { AuditLogsModule } from "./modules/audit-logs/audit-logs.module";
 import { AuthModule } from "./modules/auth/auth.module";
 import { AvailabilityModule } from "./modules/availability/availability.module";
 import { HealthModule } from "./modules/health/health.module";
+import { HandoversModule } from "./modules/handovers/handovers.module";
 import { MailModule } from "./modules/mail/mail.module";
+import { NotificationsModule } from "./modules/notifications/notifications.module";
 import { PrismaModule } from "./modules/prisma/prisma.module";
 import { SchedulesModule } from "./modules/schedules/schedules.module";
 import { TenantsModule } from "./modules/tenants/tenants.module";
@@ -19,6 +21,7 @@ import { VacationRequestsModule } from "./modules/vacation-requests/vacation-req
     }),
     PrismaModule,
     HealthModule,
+    HandoversModule,
     AuthModule,
     UsersModule,
     TenantsModule,
@@ -26,7 +29,8 @@ import { VacationRequestsModule } from "./modules/vacation-requests/vacation-req
     AvailabilityModule,
     VacationRequestsModule,
     SchedulesModule,
-    MailModule
+    MailModule,
+    NotificationsModule
   ]
 })
 export class AppModule {}

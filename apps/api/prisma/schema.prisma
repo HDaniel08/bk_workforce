@@ -74,6 +74,11 @@ enum ScheduleWeekStatus {
   LOCKED
 }
 
+enum NotificationType {
+  HANDOVER_MENTION
+  HANDOVER_REPLY
+}
+
 model Tenant {
   id                          String                       @id @default(cuid())
   name                        String
@@ -89,6 +94,9 @@ model Tenant {
   scheduleWeeks               ScheduleWeek[]
   shifts                      Shift[]
   shiftAssignments            ShiftAssignment[]
+  handoverPosts               HandoverPost[]
+  handoverTags                HandoverTag[]
+  notifications              Notification[]
   createdAt                   DateTime                     @default(now())
   updatedAt                   DateTime                     @updatedAt
 }
@@ -137,6 +145,12 @@ model User {
   shiftAssignments         ShiftAssignment[]
   passwordResetTokens      PasswordResetToken[]
   modifiedAvailabilityDays AvailabilityDay[]     @relation("AvailabilityDayLastModifiedBy")
+  authoredHandoverPosts    HandoverPost[]         @relation("HandoverPostAuthor")
+  authoredHandoverReplies  HandoverReply[]        @relation("HandoverReplyAuthor")
+  handoverPostMentions     HandoverPostMention[]
+  handoverReplyMentions    HandoverReplyMention[]
+  receivedNotifications    Notification[]          @relation("NotificationRecipient")
+  triggeredNotifications   Notification[]          @relation("NotificationActor")
   createdAt                DateTime           @default(now())
   updatedAt                DateTime           @updatedAt
 
@@ -292,4 +306,116 @@ model ShiftAssignment {
   @@unique([shiftId, userId])
   @@index([userId])
   @@index([tenantId])
+}
+
+model HandoverPost {
+  id           String                @id @default(cuid())
+  tenantId     String
+  authorUserId String
+  handoverDate DateTime              @db.Date
+  content      String
+  tenant       Tenant                @relation(fields: [tenantId], references: [id])
+  author       User                  @relation("HandoverPostAuthor", fields: [authorUserId], references: [id])
+  replies      HandoverReply[]
+  mentions     HandoverPostMention[]
+  tags         HandoverPostTag[]
+  notifications Notification[]
+  createdAt    DateTime              @default(now())
+  updatedAt    DateTime              @updatedAt
+
+  @@index([tenantId, handoverDate, createdAt])
+  @@index([authorUserId])
+}
+
+model HandoverReply {
+  id           String                 @id @default(cuid())
+  postId       String
+  authorUserId String
+  content      String
+  post         HandoverPost           @relation(fields: [postId], references: [id], onDelete: Cascade)
+  author       User                   @relation("HandoverReplyAuthor", fields: [authorUserId], references: [id])
+  mentions     HandoverReplyMention[]
+  tags         HandoverReplyTag[]
+  notifications Notification[]
+  createdAt    DateTime               @default(now())
+  updatedAt    DateTime               @updatedAt
+
+  @@index([postId, createdAt])
+  @@index([authorUserId])
+}
+
+model HandoverTag {
+  id        String             @id @default(cuid())
+  tenantId  String
+  name      String
+  tenant    Tenant             @relation(fields: [tenantId], references: [id])
+  posts     HandoverPostTag[]
+  replies   HandoverReplyTag[]
+  createdAt DateTime           @default(now())
+
+  @@unique([tenantId, name])
+  @@index([tenantId])
+}
+
+model HandoverPostMention {
+  postId          String
+  mentionedUserId String
+  post            HandoverPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  mentionedUser   User         @relation(fields: [mentionedUserId], references: [id])
+
+  @@id([postId, mentionedUserId])
+  @@index([mentionedUserId])
+}
+
+model HandoverReplyMention {
+  replyId         String
+  mentionedUserId String
+  reply           HandoverReply @relation(fields: [replyId], references: [id], onDelete: Cascade)
+  mentionedUser   User          @relation(fields: [mentionedUserId], references: [id])
+
+  @@id([replyId, mentionedUserId])
+  @@index([mentionedUserId])
+}
+
+model HandoverPostTag {
+  postId String
+  tagId  String
+  post   HandoverPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  tag    HandoverTag  @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([postId, tagId])
+  @@index([tagId])
+}
+
+model HandoverReplyTag {
+  replyId String
+  tagId   String
+  reply   HandoverReply @relation(fields: [replyId], references: [id], onDelete: Cascade)
+  tag     HandoverTag   @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([replyId, tagId])
+  @@index([tagId])
+}
+
+model Notification {
+  id                  String           @id @default(cuid())
+  tenantId            String
+  recipientUserId     String
+  actorUserId         String
+  type                NotificationType
+  deduplicationKey    String           @unique
+  handoverPostId      String?
+  handoverReplyId     String?
+  readAt              DateTime?
+  tenant              Tenant           @relation(fields: [tenantId], references: [id])
+  recipient           User             @relation("NotificationRecipient", fields: [recipientUserId], references: [id])
+  actor               User             @relation("NotificationActor", fields: [actorUserId], references: [id])
+  handoverPost        HandoverPost?     @relation(fields: [handoverPostId], references: [id], onDelete: Cascade)
+  handoverReply       HandoverReply?    @relation(fields: [handoverReplyId], references: [id], onDelete: Cascade)
+  createdAt           DateTime         @default(now())
+
+  @@index([recipientUserId, readAt, createdAt])
+  @@index([tenantId])
+  @@index([handoverPostId])
+  @@index([handoverReplyId])
 }
