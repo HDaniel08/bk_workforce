@@ -1,7 +1,7 @@
 // Fejlesztés közben ezt az egy kapcsolót állítsd át:
 // true  -> helyi backend (localhost)
 // false -> éles backend (a VITE_API_URL értéke)
-export const USE_LOCAL_BACKEND = true;
+export const USE_LOCAL_BACKEND = false;
 
 const LOCAL_BACKEND_URL = "http://localhost:3000";
 
