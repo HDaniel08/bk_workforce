@@ -9,6 +9,8 @@ import {
   AvailabilityPeriodType,
   AvailabilitySubmissionStatus,
   EmployeeSubRole,
+  ManagerDayKind,
+  ManagerMonthStatus,
   Prisma,
   UserRole,
   WorkPreference,
@@ -26,10 +28,7 @@ import type { AvailabilityDayDto } from "./dto/availability-day.dto";
 import type { SaveAvailabilityDto } from "./dto/save-availability.dto";
 import type { UpdateTeamAvailabilityDayDto } from "./dto/update-team-availability-day.dto";
 import {
-  generateMonthDays,
   generateWeekDays,
-  getMonthEnd,
-  getMonthStart,
   getWeekEnd,
   getWeekStart,
   parseDateOnly,
@@ -67,15 +66,18 @@ export class AvailabilityService {
 
   async getMe(user: AuthUser, query: MyAvailabilityQueryDto) {
     const period = this.resolveOwnPeriod(user, query);
-    const record = await this.findAvailability(user.id, period);
+    const [record, managerDays] = await Promise.all([
+      this.findAvailability(user.id, period),
+      this.getPublishedStandInDays(user.id, user.tenantId, user.employeeSubRole === EmployeeSubRole.WORKER && user.isStandInManager, period)
+    ]);
     return {
       period: this.toPeriodResponse(period),
-      availability: this.toAvailabilityResponse(
+      availability: this.withStandInDays(this.toAvailabilityResponse(
         record,
         period,
         true,
         this.getDefaultAvailabilityDay(user)
-      )
+      ), managerDays)
     };
   }
 
@@ -92,12 +94,35 @@ export class AvailabilityService {
       orderBy: { weekStartDate: "asc" }
     });
 
-    return weeks.map((week) => ({
+    const openWeeks = weeks.map((week) => ({
       weekStartDate: toDateOnly(week.weekStartDate),
       status: week.status,
       openedAt: week.openedAt,
       closedAt: week.closedAt
     }));
+    if (!user.isStandInManager) return openWeeks;
+
+    const scheduledDays = await this.prisma.managerScheduleDay.findMany({
+      where: { userId: user.id, kind: ManagerDayKind.WORK, month: { tenantId: user.tenantId, status: ManagerMonthStatus.PUBLISHED } },
+      select: { date: true }
+    });
+    const scheduledWeekDates = [...new Set(scheduledDays.map((day) => toDateOnly(getWeekStart(day.date))))];
+    const existingWeeks = await this.prisma.availabilitySubmissionWeek.findMany({
+      where: { tenantId: user.tenantId, weekStartDate: { in: scheduledWeekDates.map(parseDateOnly) } },
+      select: { weekStartDate: true, status: true, openedAt: true, closedAt: true }
+    });
+    const byWeek = new Map<string, { weekStartDate: string; status: AvailabilitySubmissionStatus; openedAt: Date | null; closedAt: Date | null }>(openWeeks.map((week) => [week.weekStartDate, week]));
+    for (const weekStartDate of scheduledWeekDates) {
+      if (byWeek.has(weekStartDate)) continue;
+      const existing = existingWeeks.find((week) => toDateOnly(week.weekStartDate) === weekStartDate);
+      byWeek.set(weekStartDate, { weekStartDate, status: existing?.status ?? AvailabilitySubmissionStatus.CLOSED, openedAt: existing?.openedAt ?? null, closedAt: existing?.closedAt ?? null });
+    }
+    return [...byWeek.values()].sort((a, b) =>
+      (a.status === AvailabilitySubmissionStatus.OPEN ? 0 : 1) - (b.status === AvailabilitySubmissionStatus.OPEN ? 0 : 1)
+      || (a.status === AvailabilitySubmissionStatus.OPEN
+        ? a.weekStartDate.localeCompare(b.weekStartDate)
+        : b.weekStartDate.localeCompare(a.weekStartDate))
+    );
   }
 
   async getClosedSubmissionWeeks(actor: AuthUser) {
@@ -340,7 +365,11 @@ export class AvailabilityService {
 
     const period = this.resolvePayloadPeriod(user, dto);
     await this.ensureSubmissionWindowOpen(user, period);
-    const normalizedDays = this.validateAndNormalizeDays(dto.days, period, submit);
+    const managerDays = await this.getPublishedStandInDays(user.id, user.tenantId, user.employeeSubRole === EmployeeSubRole.WORKER && user.isStandInManager, period);
+    const lockedDates = new Set(managerDays.map((day) => toDateOnly(day.date)));
+    const normalizedDays = this.validateAndNormalizeDays(
+      dto.days.filter((day) => !lockedDates.has(day.date)), period, submit, lockedDates
+    );
     const daysWithEditor = normalizedDays.map((day) => ({
       ...day,
       editorType: AvailabilityDayEditorType.SELF,
@@ -366,7 +395,7 @@ export class AvailabilityService {
         status: submit ? "SUBMITTED" : "DRAFT",
         submittedAt: submit ? new Date() : null,
         days: {
-          deleteMany: {},
+          deleteMany: lockedDates.size > 0 ? { date: { notIn: [...lockedDates].map(parseDateOnly) } } : {},
           create: daysWithEditor
         }
       },
@@ -391,12 +420,12 @@ export class AvailabilityService {
 
     return {
       period: this.toPeriodResponse(period),
-      availability: this.toAvailabilityResponse(
+      availability: this.withStandInDays(this.toAvailabilityResponse(
         availability,
         period,
         true,
         this.getDefaultAvailabilityDay(user)
-      )
+      ), managerDays)
     };
   }
 
@@ -407,14 +436,12 @@ export class AvailabilityService {
       tenantId,
       isActive: true,
       isDeleted: false,
-      role: UserRole.EMPLOYEE
+      role: UserRole.EMPLOYEE,
+      employeeSubRole: EmployeeSubRole.WORKER
     };
 
     if (query.userId) {
       where.id = query.userId;
-    }
-    if (query.employeeSubRole) {
-      where.employeeSubRole = query.employeeSubRole;
     }
     if (query.workerType) {
       where.workerType = query.workerType;
@@ -440,11 +467,24 @@ export class AvailabilityService {
       }
     });
 
+    const managerDays = await this.prisma.managerScheduleDay.findMany({
+      where: {
+        userId: { in: users.filter((user) => user.isStandInManager).map((user) => user.id) },
+        date: { gte: period.startDate, lte: period.endDate },
+        kind: ManagerDayKind.WORK,
+        month: { tenantId, status: ManagerMonthStatus.PUBLISHED }
+      },
+      select: { userId: true, date: true, startTime: true, endTime: true }
+    });
+
     return {
       period: this.toPeriodResponse(period),
       users: users.map((user) => {
         const record = user.availabilityWeeks[0] ?? null;
-        const availability = this.toAvailabilityResponse(record, period, false);
+        const availability = this.withStandInDays(
+          this.toAvailabilityResponse(record, period, false),
+          managerDays.filter((day) => day.userId === user.id)
+        );
         const editorByDate = new Map(
           (record?.days ?? []).map((day) => [
             toDateOnly(day.date),
@@ -481,11 +521,7 @@ export class AvailabilityService {
     dto: UpdateTeamAvailabilityDayDto
   ) {
     const tenantId = this.requireManagerTenant(actor);
-    const periodType = dto.periodType ?? AvailabilityPeriodType.WEEKLY;
-    const targetEmployeeSubRole =
-      periodType === AvailabilityPeriodType.MONTHLY
-        ? EmployeeSubRole.MANAGER
-        : EmployeeSubRole.WORKER;
+    const periodType = AvailabilityPeriodType.WEEKLY;
     const targetUser = await this.prisma.user.findFirst({
       where: {
         id: userId,
@@ -493,7 +529,7 @@ export class AvailabilityService {
         isActive: true,
         isDeleted: false,
         role: UserRole.EMPLOYEE,
-        employeeSubRole: targetEmployeeSubRole
+        employeeSubRole: EmployeeSubRole.WORKER
       }
     });
 
@@ -501,11 +537,11 @@ export class AvailabilityService {
       throw new ForbiddenException("USER_NOT_FOUND_IN_TENANT");
     }
 
-    const period =
-      periodType === AvailabilityPeriodType.MONTHLY
-        ? this.resolveMonthlyTeamUpdatePeriod(dto.monthStartDate)
-        : this.resolveWeeklyTeamUpdatePeriod(dto.weekStartDate);
-    const periodStartDate = period.monthStartDate ?? period.weekStartDate;
+    const period = this.resolveWeeklyTeamUpdatePeriod(dto.weekStartDate);
+    if (targetUser.isStandInManager && (await this.getPublishedStandInDays(targetUser.id, tenantId, true, period)).some((day) => toDateOnly(day.date) === dto.day.date)) {
+      throw new BadRequestException("MANAGER_SCHEDULE_DAY_READ_ONLY");
+    }
+    const periodStartDate = period.weekStartDate;
     if (!periodStartDate) {
       throw new BadRequestException("PERIOD_START_REQUIRED");
     }
@@ -586,21 +622,6 @@ export class AvailabilityService {
       endDate: getWeekEnd(weekStartDate),
       weekStartDate,
       monthStartDate: null
-    };
-  }
-
-  private resolveMonthlyTeamUpdatePeriod(monthStartDateValue?: string | null): Period {
-    if (!monthStartDateValue) {
-      throw new BadRequestException("MONTH_START_DATE_REQUIRED");
-    }
-
-    const monthStartDate = getMonthStart(parseDateOnly(monthStartDateValue));
-    return {
-      type: AvailabilityPeriodType.MONTHLY,
-      startDate: monthStartDate,
-      endDate: getMonthEnd(monthStartDate),
-      weekStartDate: null,
-      monthStartDate
     };
   }
 
@@ -736,18 +757,6 @@ export class AvailabilityService {
   }
 
   private resolveOwnPeriod(user: AuthUser, query: MyAvailabilityQueryDto): Period {
-    if (user.employeeSubRole === EmployeeSubRole.MANAGER) {
-      const baseDate = query.monthStartDate ? parseDateOnly(query.monthStartDate) : new Date();
-      const monthStartDate = getMonthStart(baseDate);
-      return {
-        type: AvailabilityPeriodType.MONTHLY,
-        startDate: monthStartDate,
-        endDate: getMonthEnd(monthStartDate),
-        weekStartDate: null,
-        monthStartDate
-      };
-    }
-
     if (user.employeeSubRole === EmployeeSubRole.WORKER) {
       const baseDate = query.weekStartDate ? parseDateOnly(query.weekStartDate) : new Date();
       const weekStartDate = getWeekStart(baseDate);
@@ -764,33 +773,16 @@ export class AvailabilityService {
   }
 
   private resolvePayloadPeriod(user: AuthUser, dto: SaveAvailabilityDto): Period {
-    const expectedType =
-      user.employeeSubRole === EmployeeSubRole.MANAGER
-        ? AvailabilityPeriodType.MONTHLY
-        : AvailabilityPeriodType.WEEKLY;
-
-    if (dto.periodType !== expectedType) {
+    if (dto.periodType !== AvailabilityPeriodType.WEEKLY) {
       throw new BadRequestException("INVALID_PERIOD_TYPE");
     }
 
     return this.resolveOwnPeriod(user, {
-      weekStartDate: dto.weekStartDate ?? undefined,
-      monthStartDate: dto.monthStartDate ?? undefined
+      weekStartDate: dto.weekStartDate ?? undefined
     });
   }
 
   private resolveTeamPeriod(query: TeamAvailabilityQueryDto): Period {
-    if (query.monthStartDate && !query.weekStartDate) {
-      const monthStartDate = getMonthStart(parseDateOnly(query.monthStartDate));
-      return {
-        type: AvailabilityPeriodType.MONTHLY,
-        startDate: monthStartDate,
-        endDate: getMonthEnd(monthStartDate),
-        weekStartDate: null,
-        monthStartDate
-      };
-    }
-
     const weekStartDate = getWeekStart(
       query.weekStartDate ? parseDateOnly(query.weekStartDate) : new Date()
     );
@@ -870,10 +862,11 @@ export class AvailabilityService {
   private validateAndNormalizeDays(
     days: AvailabilityDayDto[],
     period: Period,
-    submit: boolean
+    submit: boolean,
+    excludedDates: ReadonlySet<string> = new Set()
   ): NormalizedAvailabilityDay[] {
     const expectedDates = new Set(
-      this.generatePeriodDates(period).map((date) => toDateOnly(date))
+      this.generatePeriodDates(period).map((date) => toDateOnly(date)).filter((date) => !excludedDates.has(date))
     );
 
     if (submit && days.length !== expectedDates.size) {
@@ -930,6 +923,42 @@ export class AvailabilityService {
         note: day.note || null
       };
     });
+  }
+
+  private async getPublishedStandInDays(userId: string, tenantId: string | null, isStandInManager: boolean, period: Period) {
+    if (!isStandInManager || !tenantId) return [];
+    return this.prisma.managerScheduleDay.findMany({
+      where: {
+        userId,
+        date: { gte: period.startDate, lte: period.endDate },
+        kind: ManagerDayKind.WORK,
+        month: { tenantId, status: ManagerMonthStatus.PUBLISHED }
+      },
+      select: { date: true, startTime: true, endTime: true }
+    });
+  }
+
+  private withStandInDays<T extends { days: Array<{ date: string; type: AvailabilityDayType; workPreference: WorkPreference | null; startTime: string | null; endTime: string | null; note: string }> }>(availability: T, managerDays: Array<{ date: Date; startTime: string | null; endTime: string | null }>) {
+    if (managerDays.length === 0) return availability;
+    const byDate = new Map(managerDays.map((day) => [toDateOnly(day.date), day]));
+    const stored = new Map(availability.days.map((day) => [day.date, day]));
+    const dates = [...new Set([...stored.keys(), ...byDate.keys()])].sort();
+    return {
+      ...availability,
+      days: dates.map((date) => {
+        const day = stored.get(date) ?? { date, type: AvailabilityDayType.WORK, workPreference: WorkPreference.TIME_RANGE, startTime: null, endTime: null, note: "" };
+        const managerDay = byDate.get(date);
+        return managerDay ? {
+          ...day,
+          type: AvailabilityDayType.WORK,
+          workPreference: WorkPreference.TIME_RANGE,
+          startTime: managerDay.startTime,
+          endTime: managerDay.endTime,
+          note: "Beugrós Mgr",
+          isManagerScheduleDay: true
+        } : day;
+      })
+    };
   }
 
   private validateTimeWindow(value: string) {
@@ -1012,14 +1041,11 @@ export class AvailabilityService {
   }
 
   private generatePeriodDates(period: Period) {
-    return period.type === AvailabilityPeriodType.MONTHLY
-      ? generateMonthDays(period.monthStartDate ?? period.startDate)
-      : generateWeekDays(period.weekStartDate ?? period.startDate);
+    return generateWeekDays(period.weekStartDate ?? period.startDate);
   }
 
   private getDefaultAvailabilityDay(user: AuthUser): DefaultAvailabilityDay {
     if (
-      user.employeeSubRole === EmployeeSubRole.MANAGER ||
       user.workerType === WorkerType.FULL_TIME
     ) {
       return {

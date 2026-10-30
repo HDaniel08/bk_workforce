@@ -35,6 +35,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
         tenantId: true,
         role: true,
         employeeSubRole: true,
+        isStandInManager: true,
         workerType: true,
         isActive: true,
         isDeleted: true
@@ -58,6 +59,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       tenantId: user.tenantId,
       role: user.role,
       employeeSubRole: user.employeeSubRole,
+      isStandInManager: user.isStandInManager,
       workerType: user.workerType
     };
   }

@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { getUsers, type ManagedUser } from "../api/users";
 import { Button } from "../components/ui/Button";
 import { Card } from "../components/ui/Card";
+import { ManagerWeekWidget } from "../components/manager/ManagerWeekWidget";
 import { authStore } from "../store/auth-store";
 
 export function ManagerDashboardPage() {
@@ -31,6 +32,7 @@ export function ManagerDashboardPage() {
           <p className="mt-2 text-3xl font-bold">{users.filter((item) => item.isActive).length}</p>
         </Card>
       </div>
+      <ManagerWeekWidget />
       <Link to="/manager/users">
         <Button>Dolgozók kezelése</Button>
       </Link>

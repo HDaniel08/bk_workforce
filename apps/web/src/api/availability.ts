@@ -5,7 +5,7 @@ import type {
   WorkerType
 } from "../store/auth-store";
 
-export type AvailabilityPeriodType = "WEEKLY" | "MONTHLY";
+export type AvailabilityPeriodType = "WEEKLY";
 export type AvailabilityStatus = "DRAFT" | "SUBMITTED" | "LOCKED";
 export type AvailabilityDayType = "OFF" | "VACATION" | "WORK";
 export type WorkPreference = "ANYTIME" | "TIME_RANGE";
@@ -17,6 +17,7 @@ export interface AvailabilityDay {
   startTime: string | null;
   endTime: string | null;
   note: string;
+  isManagerScheduleDay?: boolean;
   editor?: {
     type: "SELF" | "MANAGER" | "SYSTEM";
     user: {
@@ -30,7 +31,6 @@ export interface AvailabilityDay {
 export interface AvailabilityPayload {
   periodType: AvailabilityPeriodType;
   weekStartDate: string | null;
-  monthStartDate: string | null;
   days: AvailabilityDay[];
 }
 
@@ -186,9 +186,7 @@ export async function getTeamAvailability(params: Record<string, string>) {
 export async function updateTeamAvailabilityDay(
   userId: string,
   payload: {
-    periodType?: AvailabilityPeriodType;
     weekStartDate?: string | null;
-    monthStartDate?: string | null;
     day: AvailabilityDay;
   }
 ) {

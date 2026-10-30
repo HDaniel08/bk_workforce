@@ -55,6 +55,9 @@ function isMissingTableError(error: unknown) {
 
 async function clearDatabase() {
   try {
+    await prisma.managerScheduleDay.deleteMany();
+    await prisma.managerScheduleMonth.deleteMany();
+    await prisma.managerDayRequest.deleteMany();
     await prisma.shiftAssignment.deleteMany();
     await prisma.shift.deleteMany();
     await prisma.scheduleWeek.deleteMany();
@@ -89,18 +92,6 @@ function addUtcDays(date: Date, days: number) {
   const result = new Date(date);
   result.setUTCDate(result.getUTCDate() + days);
   return result;
-}
-
-function getUtcMonthStart(date: Date) {
-  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), 1));
-}
-
-function getUtcMonthDays(monthStartDate: Date) {
-  const dayCount = new Date(
-    Date.UTC(monthStartDate.getUTCFullYear(), monthStartDate.getUTCMonth() + 1, 0)
-  ).getUTCDate();
-
-  return Array.from({ length: dayCount }, (_, index) => addUtcDays(monthStartDate, index));
 }
 
 function getWorkerAvailabilityDays(
@@ -143,46 +134,6 @@ function getWorkerAvailabilityDays(
         workPreference: "TIME_RANGE",
         startTime: workerType === "STUDENT" ? "16:00" : "09:00",
         endTime: workerType === "STUDENT" ? "22:00" : "17:00",
-        note: ""
-      };
-    }
-
-    return {
-      date,
-      type: "WORK",
-      workPreference: "ANYTIME",
-      startTime: null,
-      endTime: null,
-      note: ""
-    };
-  });
-}
-
-function getManagerAvailabilityDays(
-  monthStartDate: Date,
-  managerIndex: number
-): Prisma.AvailabilityDayCreateWithoutAvailabilityWeekInput[] {
-  return getUtcMonthDays(monthStartDate).map((date) => {
-    const day = date.getUTCDay();
-
-    if (day === 0 || (day === 6 && managerIndex !== 1)) {
-      return {
-        date,
-        type: "OFF",
-        workPreference: null,
-        startTime: null,
-        endTime: null,
-        note: "Piheno"
-      };
-    }
-
-    if ((date.getUTCDate() + managerIndex) % 5 === 0) {
-      return {
-        date,
-        type: "WORK",
-        workPreference: "TIME_RANGE",
-        startTime: "10:00",
-        endTime: "18:00",
         note: ""
       };
     }
@@ -258,15 +209,14 @@ async function main() {
   );
 
   const managers = users.filter((user) => user.employeeSubRole === "MANAGER");
+  if (managers[0]) {
+    await prisma.tenant.update({ where: { id: tenant.id }, data: { managerScheduleOwnerId: managers[0].id } });
+  }
   const workers = users.filter((user) => user.employeeSubRole === "WORKER");
   const currentWeekStart = getUtcWeekStart(new Date());
   const weekStarts = Array.from({ length: historyWeekCount }, (_, index) =>
     addUtcDays(currentWeekStart, -7 * (historyWeekCount - index))
   );
-  const managerMonthStarts = [
-    getUtcMonthStart(addUtcDays(currentWeekStart, -35)),
-    getUtcMonthStart(currentWeekStart)
-  ];
 
   for (const weekStartDate of weekStarts) {
     await prisma.availabilitySubmissionWeek.create({
@@ -304,31 +254,6 @@ async function main() {
               editorType: "SELF" as const,
               lastModifiedByUserId: worker.id
             }))
-          }
-        }
-      });
-    }
-  }
-
-  for (const [managerIndex, manager] of managers.entries()) {
-    for (const monthStartDate of managerMonthStarts) {
-      await prisma.availabilityWeek.create({
-        data: {
-          tenantId: tenant.id,
-          userId: manager.id,
-          periodType: "MONTHLY",
-          weekStartDate: null,
-          monthStartDate,
-          status: "SUBMITTED",
-          submittedAt: addUtcDays(monthStartDate, 1),
-          days: {
-            create: getManagerAvailabilityDays(monthStartDate, managerIndex).map(
-              (day) => ({
-                ...day,
-                editorType: "SELF" as const,
-                lastModifiedByUserId: manager.id
-              })
-            )
           }
         }
       });

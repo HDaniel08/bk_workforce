@@ -166,6 +166,7 @@ export function WorkerAvailabilityPage() {
   }
 
   function openDayEditor(day: AvailabilityDay) {
+    if (day.isManagerScheduleDay || openWeeks.find((week) => week.weekStartDate === weekStartDate)?.status !== "OPEN") return;
     const editableDay = {
       ...day,
       type: day.type === "VACATION" ? "OFF" as const : day.type
@@ -193,8 +194,7 @@ export function WorkerAvailabilityPage() {
     const payload = {
       periodType: "WEEKLY" as const,
       weekStartDate,
-      monthStartDate: null,
-      days: daysToSave
+      days: daysToSave.map(({ date, type, workPreference, startTime, endTime, note }) => ({ date, type, workPreference, startTime, endTime, note }))
     };
     const data = submit
       ? await submitMyAvailability(payload)
@@ -236,7 +236,8 @@ export function WorkerAvailabilityPage() {
     continueSave(normalizedDays, submit);
   }
 
-  const canEdit = openWeeks.length > 0 && Boolean(weekStartDate);
+  const canView = openWeeks.length > 0 && Boolean(weekStartDate);
+  const canEdit = canView && openWeeks.find((week) => week.weekStartDate === weekStartDate)?.status === "OPEN";
 
   return (
     <section className="space-y-5">
@@ -260,7 +261,7 @@ export function WorkerAvailabilityPage() {
               openWeeks.length > 0
                 ? openWeeks.map((week) => ({
                     value: week.weekStartDate,
-                    label: formatWeekLabel(week.weekStartDate)
+                    label: `${formatWeekLabel(week.weekStartDate)}${week.status === "OPEN" ? "" : " · csak olvasható"}`
                   }))
                 : [{ value: "", label: "Nincs megnyitott hét" }]
             }
@@ -271,7 +272,7 @@ export function WorkerAvailabilityPage() {
         </div>
       </Card>
 
-      {canEdit ? (
+      {canView ? (
         <Card className="overflow-hidden p-0">
           <div className="divide-y divide-brown/10 sm:hidden">
             {days.map((day) => {
@@ -285,8 +286,9 @@ export function WorkerAvailabilityPage() {
                     <span className="block text-xs text-brown/65">{formatDate(day.date)}</span>
                   </div>
                   <button
-                    className={`min-h-11 flex-1 rounded-md px-3 py-2 text-center text-xs font-bold leading-tight transition hover:ring-2 hover:ring-red/30 ${style.className}`}
+                    className={`min-h-11 flex-1 rounded-md px-3 py-2 text-center text-xs font-bold leading-tight transition ${day.isManagerScheduleDay ? "cursor-default ring-1 ring-green/40" : "hover:ring-2 hover:ring-red/30"} ${style.className}`}
                     type="button"
+                    disabled={!canEdit || day.isManagerScheduleDay}
                     onClick={() => openDayEditor(day)}
                   >
                     <span>{style.label}</span>
@@ -326,6 +328,7 @@ export function WorkerAvailabilityPage() {
                         <button
                           className={`min-h-10 w-full rounded-md px-1.5 py-1 text-center text-xs font-bold leading-tight transition hover:ring-2 hover:ring-red/30 ${style.className}`}
                           type="button"
+                          disabled={!canEdit || day.isManagerScheduleDay}
                           onClick={() => openDayEditor(day)}
                         >
                           <span>{style.label}</span>
@@ -349,6 +352,7 @@ export function WorkerAvailabilityPage() {
         </Card>
       )}
 
+      {canView && !canEdit ? <p className="text-sm font-semibold text-brown/70">A beugrós manager műszakok itt csak olvashatók.</p> : null}
       {message ? <p className="font-semibold text-green">{message}</p> : null}
       <div className="flex items-center gap-2">
         <Button disabled={!canEdit} onClick={() => save(false)}>

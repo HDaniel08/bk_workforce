@@ -1,7 +1,7 @@
 import { api } from "../lib/api";
 import type { HandoverPerson } from "./handovers";
 
-export type NotificationType = "HANDOVER_MENTION" | "HANDOVER_REPLY";
+export type NotificationType = "HANDOVER_MENTION" | "HANDOVER_REPLY" | "MANAGER_SCHEDULE_PUBLISHED" | "MANAGER_SCHEDULE_UPDATED";
 
 export interface AppNotification {
   id: string;
@@ -12,6 +12,7 @@ export interface AppNotification {
   handoverDate: string | null;
   handoverPostId: string | null;
   handoverReplyId: string | null;
+  scheduleMonth: string | null;
   snippet: string;
 }
 
@@ -32,4 +33,3 @@ export async function markNotificationRead(id: string) {
 export async function markAllNotificationsRead() {
   await api.post("/notifications/read-all");
 }
-

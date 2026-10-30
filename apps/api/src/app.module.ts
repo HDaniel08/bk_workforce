@@ -6,9 +6,9 @@ import { AvailabilityModule } from "./modules/availability/availability.module";
 import { HealthModule } from "./modules/health/health.module";
 import { HandoversModule } from "./modules/handovers/handovers.module";
 import { MailModule } from "./modules/mail/mail.module";
+import { ManagerSchedulesModule } from "./modules/manager-schedules/manager-schedules.module";
 import { NotificationsModule } from "./modules/notifications/notifications.module";
 import { PrismaModule } from "./modules/prisma/prisma.module";
-import { SchedulesModule } from "./modules/schedules/schedules.module";
 import { TenantsModule } from "./modules/tenants/tenants.module";
 import { UsersModule } from "./modules/users/users.module";
 import { VacationRequestsModule } from "./modules/vacation-requests/vacation-requests.module";
@@ -28,8 +28,8 @@ import { VacationRequestsModule } from "./modules/vacation-requests/vacation-req
     AuditLogsModule,
     AvailabilityModule,
     VacationRequestsModule,
-    SchedulesModule,
     MailModule,
+    ManagerSchedulesModule,
     NotificationsModule
   ]
 })

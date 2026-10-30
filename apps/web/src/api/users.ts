@@ -11,6 +11,7 @@ export interface ManagedUser {
   phone: string | null;
   role: "ADMIN" | "EMPLOYEE";
   employeeSubRole: EmployeeSubRole | null;
+  isStandInManager: boolean;
   workerType: WorkerType | null;
   contractHours: ContractHours | null;
   isActive: boolean;
@@ -27,6 +28,7 @@ export type UserInput = {
   lastName: string;
   phone?: string;
   employeeSubRole: EmployeeSubRole;
+  isStandInManager?: boolean;
   workerType?: WorkerType;
   contractHours: ContractHours;
   isActive?: boolean;

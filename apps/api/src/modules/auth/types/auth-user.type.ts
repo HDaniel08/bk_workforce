@@ -5,5 +5,6 @@ export interface AuthUser {
   tenantId: string | null;
   role: UserRole;
   employeeSubRole: EmployeeSubRole | null;
+  isStandInManager: boolean;
   workerType: WorkerType | null;
 }

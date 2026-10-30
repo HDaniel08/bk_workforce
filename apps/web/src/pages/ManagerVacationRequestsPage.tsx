@@ -17,6 +17,7 @@ import {
   employeeSubRoleLabel
 } from "../utils/status-labels";
 import { formatDateOnly, getCurrentMonthValue } from "../utils/date";
+import { authStore } from "../store/auth-store";
 
 function getMonthRange(month: string) {
   const [year, monthNumber] = month.split("-").map(Number);
@@ -139,12 +140,12 @@ export function ManagerVacationRequestsPage() {
             {request.reviewerNote ? (
               <p className="mt-3 text-sm text-brown/70">{request.reviewerNote}</p>
             ) : null}
-            {request.status === "PENDING" ||
+            {(request.requester.employeeSubRole !== "MANAGER" || request.requesterUserId !== authStore.getUser()?.id) && (request.status === "PENDING" ||
             (request.status === "APPROVED" &&
               request.startDate >
                 new Date(Date.now() - new Date().getTimezoneOffset() * 60_000)
                   .toISOString()
-                  .slice(0, 10)) ? (
+                  .slice(0, 10))) ? (
               <div className="mt-4 space-y-3">
                 <Input
                   label="Bírálói megjegyzés"

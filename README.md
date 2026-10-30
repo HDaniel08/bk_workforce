@@ -390,7 +390,6 @@ GET /availability/required-missing
 
 ```text
 weekStartDate
-monthStartDate
 ```
 
 `GET /availability/team` queryk:
@@ -398,9 +397,7 @@ monthStartDate
 ```text
 tenantId
 weekStartDate
-monthStartDate
 userId
-employeeSubRole
 workerType
 ```
 
@@ -410,7 +407,6 @@ Save/submit body pelda:
 {
   "periodType": "WEEKLY",
   "weekStartDate": "2026-07-06",
-  "monthStartDate": null,
   "days": [
     {
       "date": "2026-07-06",
@@ -429,7 +425,7 @@ Save/submit body pelda:
 - `WORKER`: csak sajat heti (`WEEKLY`) raereset latja es modosithatja.
 - `STUDENT` worker: heti leadasa kotelezo; manager a `required-missing` endpointon latja a hianyzo leadasokat.
 - `FULL_TIME` worker: heti raeres leadasa opcionalis.
-- `MANAGER`: sajat havi (`MONTHLY`) raereset adhatja le, es sajat tenant dolgozoinak heti raereseit lathatja.
+- `MANAGER`: sajat tenant dolgozoinak heti raereseit lathatja es kezelheti.
 - `ADMIN`: read-only csapat availability adatokat lathat `tenantId` szuressel.
 - `VACATION`: jelenleg csak manualis nap tipus, automatikus szabadsagkapcsolat kesobb keszul.
 
@@ -437,75 +433,21 @@ Frontend route-ok:
 
 ```text
 /worker/availability          worker heti raeres
-/manager/my-availability      manager sajat havi raeres
 /manager/availability         manager csapat raeresek
 ```
 
-## Schedule endpointok
+## Manager havi beosztas
 
-Minden schedule endpoint JWT-vel vedett.
-
-Hetek:
-
-```http
-GET /schedules/weeks
-POST /schedules/weeks
-GET /schedules/weeks/:id
-POST /schedules/weeks/:id/publish
-POST /schedules/weeks/:id/lock
-```
-
-Muszakok:
-
-```http
-POST /schedules/weeks/:id/shifts
-PATCH /schedules/shifts/:shiftId
-DELETE /schedules/shifts/:shiftId
-POST /schedules/shifts/:shiftId/assign
-DELETE /schedules/assignments/:assignmentId
-```
-
-Sajat beosztas:
-
-```http
-GET /schedules/me
-```
-
-## Schedule mukodes
-
-- `MANAGER`: csak sajat tenantban hozhat letre es modosithat beosztasi heteket, muszakokat es hozzarendeleseket.
-- `ADMIN`: read-only modban listazhat es megnezhet schedule weekeket, opcionaalis `tenantId` szuressel.
-- `WORKER`: csak sajat beosztasat latja a `/schedules/me` endpointon.
-- Worker es manager sajat beosztasban csak `PUBLISHED` vagy `LOCKED` schedule week muszakok jelennek meg, `DRAFT` nem.
-
-Manager kezi beosztaskeszites frontend route:
-
-```text
-/manager/schedules
-```
-
-Sajat beosztas route-ok:
-
-```text
-/worker/schedule
-/manager/schedule
-```
-
-Schedule validacios szabalyok:
-
-- Muszak csak `DRAFT` schedule weekben hozhato letre, modosithato vagy torolheto.
-- Muszak datum csak a schedule week hetjebe eshet.
-- Idoformatum: `HH:mm`.
-- Engedelyezett idotartomany: 07:00 es masnap 01:00 kozott.
-- Ejfelen atnyulo muszak megengedett, peldaul `18:00-01:00`.
-- `22:00-02:00` invalid, mert 01:00 utan vegzodik.
-- Muszak hossza minimum 2 ora, maximum 12 ora.
-- Ugyanaz a user nem oszthato be utkozo muszakokra.
-- Egy napon egy user maximum 12 orat dolgozhat.
-- Ket kulonbozo muszak kozott legalabb 10 ora piheno kell.
-- Csak aktiv `EMPLOYEE` user oszthato be, `ADMIN` nem.
-- A schedule modul most meg nem vizsgalja a raerest.
-- Elfogadott szabadsagkerelem eseten a dolgozo nem oszthato be az adott napra.
+- Tenantonkent egy aktiv manager a beosztasfelelos. Az uj tenant elso managere kapja meg a jogot; a profiloldalon atadhatja, vagy a szuperadmin a tenantok oldalan atallithatja.
+- A managerek napi munka- vagy pihenoigenyt adhatnak le rovid megjegyzessel a `/manager/requests` oldalon. Ugyanarra a napra beadott masik managerkerelemrol anonim, nem blokkolo figyelmeztetest kapnak.
+- Szabadsagot ugyanezen az oldalon a meglevo szabadsagkerelem-rendszerbe adnak le. Sajat manager-szabadsagkerelmet masik manager biralja el.
+- A managerkerelmek es a `/manager/monthly-schedule` alapertelmezetten a kovetkezo honapot nyitjak meg. A beosztas heti, het egyenlo naposzlopbol allo nezetben jelenik meg vizszintes gorgetes nelkul. Ezen az oldalon a desktop menu a tartalom fole csuszik; a kijelolt nap jobb oldali panelen, mobilon also panelen szerkesztheto. A kijelolt felelos szerkesztheti a piszkozatot, kozzeteheti, majd javitashoz visszateheti piszkozatba.
+- A kozzetett managerbeosztast minden manager az osszes aktiv managerre latja, de a muszakfigyelmeztetesek csak a piszkozatot szerkeszto felelosnek jelennek meg. A manager kezdolapon hetente lapozhato, egyszerusitett kozzetett beosztas lathato. Elso kozzetetelkor es modositas utani ujrakozzetetelkor minden aktiv manager ertesitest kap; egy kozzetett beosztasba bekerulo jovahagyott managerszabadsag szinten modositasrol szolo ertesitest indit.
+- A munka naphoz kezdes es vegzes kotelezo. Ejfel utan vegzodo muszak is lehet; a netto ido a muszak hossza minusz egy ora szunet, a kezdonaphoz szamolva.
+- Az elvart munkanapok es pihenonapok szama havonta kozos. Az idoelegyenleg a beosztott netto munkaora es a jovahagyott szabadsagonkent 8 ora osszege, minusz az elvart munkanapok szorozva nyolc oraval. A kethavi ciklus mindig paros honappal zarul.
+- Piros jelzes figyelmeztet a 9 oratol eltero muszakra (8 ora munka + 1 ora szunet), az 5 napnal hosszabb egybefuggo munkara es a ket muszak kozotti 10 oranal rovidebb pihenore. Az ellenorzes a szomszedos honapok beosztott napjait is figyelembe veszi.
+- Az elfogadott manager-szabadsag a beosztasban kotelezo Szabadsag nap; a fuggo szabadsag figyelmezteteskent jelenik meg.
+- Az adatbazishoz a `20261030120000_manager_month_schedule` migraciot futtatni kell.
 
 ## Vacation request endpointok
 
@@ -552,16 +494,9 @@ Approve folyamat:
 - `reviewedByUserId`, `reviewedAt`, `reviewerNote` mentodik.
 - Az erintett napokra automatikusan `VACATION` tipus kerul az availability-be.
 - `WORKER` eseten heti `WEEKLY` availability rekordba kerul.
-- `MANAGER` eseten havi `MONTHLY` availability rekordba kerul.
+- Manager szabadsagkerelem nem modosit availability rekordot.
 - Meglevo `WORK` vagy `OFF` napot a rendszer `VACATION` tipusra ir felul.
 - Szombat es vasarnap nem szamit szabadsagnapnak; ha a kerelem idoszaka hetveget is tartalmaz, ezek `OFF` pihenonapkent kerulnek be.
-
-Schedule kapcsolodas:
-
-- Shift assignment letrehozasakor a backend ellenorzi az `APPROVED` szabadsagkerelmeket.
-- Ha a dolgozo a shift hetkoznapi napjan elfogadott szabadsagon van, nem oszthato be.
-- Hetvegi napot nem blokkol a szabadsagkerelem datumtartomanya.
-- A hiba uzenete: `A dolgozo elfogadott szabadsagon van ezen a napon.`
 
 Frontend route-ok:
 

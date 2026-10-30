@@ -102,6 +102,8 @@ export class TenantsService {
         }
       });
 
+      await tx.tenant.update({ where: { id: createdTenant.id }, data: { managerScheduleOwnerId: createdTenantAdmin.id } });
+
       return {
         tenant: createdTenant,
         tenantAdmin: createdTenantAdmin

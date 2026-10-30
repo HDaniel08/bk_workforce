@@ -165,7 +165,7 @@ export function ManagerTeamAvailabilityPage() {
 
   async function load() {
     const [teamData, submissionData] = await Promise.all([
-      getTeamAvailability({ weekStartDate, employeeSubRole: "WORKER" }),
+      getTeamAvailability({ weekStartDate }),
       getAvailabilitySubmissionWeek({ weekStartDate })
     ]);
     setTeam(teamData);
@@ -183,6 +183,7 @@ export function ManagerTeamAvailabilityPage() {
 
   function openDayEditor(user: TeamUser, date: string) {
     const existingDay = user.availability.days.find((item) => item.date === date);
+    if (existingDay?.isManagerScheduleDay) return;
     const editableDay: AvailabilityDay = existingDay
       ? {
           ...existingDay,
@@ -459,6 +460,7 @@ export function ManagerTeamAvailabilityPage() {
                             <button
                               className={`min-h-10 w-full rounded-md px-1.5 py-1 text-center text-xs font-bold leading-tight transition hover:ring-2 hover:ring-red/30 ${style.className}`}
                               type="button"
+                              disabled={day?.isManagerScheduleDay}
                               onClick={() => openDayEditor(user, headerDay)}
                             >
                               <span>{style.label}</span>

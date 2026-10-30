@@ -2,5 +2,5 @@ import { SetMetadata } from "@nestjs/common";
 import type { EmployeeSubRole, UserRole } from "@prisma/client";
 
 export const ROLES_KEY = "roles";
-export const Roles = (...roles: Array<UserRole | EmployeeSubRole>) =>
+export const Roles = (...roles: Array<UserRole | EmployeeSubRole | "STAND_IN_MANAGER">) =>
   SetMetadata(ROLES_KEY, roles);

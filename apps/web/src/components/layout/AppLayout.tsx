@@ -34,12 +34,13 @@ const managerItems: NavigationItem[] = [
   { to: "/manager", label: "Dashboard" },
   { to: "/manager/handovers", label: "Átadó" },
   { to: "/manager/users", label: "Dolgozók" },
+  { to: "/manager/profile", label: "Profil" },
+  { to: "/manager/monthly-schedule", label: "Managerbeosztás" },
   {
     label: "Ráérések",
     children: [
       { to: "/manager/availability", label: "Csapat ráérés" },
-      { to: "/manager/manager-availability", label: "Manager ráérés" },
-      { to: "/manager/my-availability", label: "Saját ráérés" },
+      { to: "/manager/requests", label: "Managerkérelmeim" },
       { to: "/manager/vacation-requests", label: "Szabadságkérelmek" },
       { to: "/manager/my-vacation-requests", label: "Saját szabadság" }
     ]
@@ -57,7 +58,6 @@ const managerItems: NavigationItem[] = [
       }
     ]
   }
-  // { to: "/manager/schedule-writing", label: "Beosztásírás" },
   // { to: "/manager/test-email", label: "Teszt email" }
 ];
 
@@ -70,10 +70,11 @@ const workerItems = [
 export function AppLayout() {
   const navigate = useNavigate();
   const location = useLocation();
+  const isManagerMonthlySchedule = location.pathname === "/manager/monthly-schedule";
   const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false);
   const [openDesktopGroup, setOpenDesktopGroup] = useState<string | null>(null);
   const [openMobileGroup, setOpenMobileGroup] = useState<NavigationItem | null>(null);
-  const [isDesktopSidebarOpen, setIsDesktopSidebarOpen] = useState(true);
+  const [isDesktopSidebarOpen, setIsDesktopSidebarOpen] = useState(!isManagerMonthlySchedule);
   const [isNotificationPanelOpen, setIsNotificationPanelOpen] = useState(false);
   const [notifications, setNotifications] = useState<NotificationsResponse>({
     unreadCount: 0,
@@ -85,7 +86,9 @@ export function AppLayout() {
       ? adminItems
       : user?.employeeSubRole === "MANAGER"
         ? managerItems
-        : workerItems;
+        : user?.isStandInManager
+          ? [...workerItems, { to: "/manager/handovers", label: "Átadó" }]
+          : workerItems;
   const userName = user ? `${user.lastName} ${user.firstName}` : "BK Workforce";
   const hasMoreMenu = items.length > 5;
   const bottomItems = hasMoreMenu ? items.slice(0, 4) : items;
@@ -93,6 +96,8 @@ export function AppLayout() {
   const isMoreItemActive = moreItems.some(
     (item) => isNavigationItemActive(item, location.pathname)
   );
+
+  useEffect(() => { setIsDesktopSidebarOpen(!isManagerMonthlySchedule); }, [isManagerMonthlySchedule]);
 
   useEffect(() => {
     const activeGroup = items.find(
@@ -143,6 +148,8 @@ export function AppLayout() {
       });
       if (notification.handoverReplyId) params.set("reply", notification.handoverReplyId);
       navigate(`/manager/handovers?${params.toString()}`);
+    } else if (notification.scheduleMonth) {
+      navigate(`/manager/monthly-schedule?month=${notification.scheduleMonth}`);
     }
   }
 
@@ -185,13 +192,14 @@ export function AppLayout() {
   return (
     <div
       className={[
-        "min-h-screen bg-cream text-brown md:grid md:transition-[grid-template-columns] md:duration-200",
-        isDesktopSidebarOpen
-          ? "md:grid-cols-[240px_1fr]"
-          : "md:grid-cols-[0_1fr]"
+        "min-h-screen bg-cream text-brown",
+        isManagerMonthlySchedule
+          ? "md:block"
+          : `md:grid md:transition-[grid-template-columns] md:duration-200 ${isDesktopSidebarOpen ? "md:grid-cols-[240px_1fr]" : "md:grid-cols-[0_1fr]"}`
       ].join(" ")}
     >
       {notificationButton()}
+      {isManagerMonthlySchedule && isDesktopSidebarOpen ? <button type="button" aria-label="Oldalsó navigáció becsukása" className="fixed inset-0 z-30 hidden bg-brown/25 md:block" onClick={() => setIsDesktopSidebarOpen(false)} /> : null}
 
       <header className="sticky top-0 z-20 flex items-center justify-between gap-3 border-b border-brown/10 bg-white/95 px-4 py-3 pr-16 backdrop-blur md:hidden">
         <div className="min-w-0">
@@ -206,9 +214,11 @@ export function AppLayout() {
       <aside
         className={[
           "hidden overflow-hidden bg-white/70 md:block",
-          isDesktopSidebarOpen
-            ? "border-r border-brown/10 p-5"
-            : "border-r-0 p-0"
+          isManagerMonthlySchedule
+            ? `md:fixed md:inset-y-0 md:left-0 md:z-40 md:w-60 md:overflow-y-auto md:bg-white md:p-5 md:shadow-xl md:transition-transform md:duration-200 ${isDesktopSidebarOpen ? "md:translate-x-0" : "md:pointer-events-none md:-translate-x-full"}`
+            : isDesktopSidebarOpen
+              ? "border-r border-brown/10 p-5"
+              : "border-r-0 p-0"
         ].join(" ")}
       >
         <div className="min-w-[199px]">
@@ -299,9 +309,9 @@ export function AppLayout() {
         </div>
       </aside>
 
-      <div className="pb-20 md:pb-0">
+      <div className="min-w-0 pb-20 md:pb-0">
         {!isDesktopSidebarOpen ? (
-          <div className="hidden items-center gap-2 px-4 pt-4 md:flex">
+          <div className={isManagerMonthlySchedule ? "fixed left-3 top-3 z-30 hidden items-center gap-2 md:flex" : "hidden items-center gap-2 px-4 pt-4 md:flex"}>
             <button
               type="button"
               aria-label="Oldalsó navigáció kinyitása"
@@ -313,7 +323,7 @@ export function AppLayout() {
             </button>
           </div>
         ) : null}
-        <main className="mx-auto max-w-6xl px-4 py-5 md:px-8 md:py-8">
+        <main className={isManagerMonthlySchedule ? "mx-auto w-full min-w-0 max-w-none px-3 py-5 md:px-6 md:pb-8 md:pt-16" : "mx-auto max-w-6xl px-4 py-5 md:px-8 md:py-8"}>
           <Outlet />
         </main>
       </div>
@@ -343,7 +353,7 @@ export function AppLayout() {
               {notifications.items.length === 0 ? (
                 <div className="px-5 py-12 text-center">
                   <p className="font-bold">Nincs értesítésed.</p>
-                  <p className="mt-1 text-sm text-brown/55">Az új megjelölések és válaszok itt jelennek meg.</p>
+                  <p className="mt-1 text-sm text-brown/55">Az új megjelölések, válaszok és managerbeosztások itt jelennek meg.</p>
                 </div>
               ) : (
                 <>
@@ -525,7 +535,11 @@ function renderNotification(
 ) {
   const actorName = `${notification.actor.lastName} ${notification.actor.firstName}`;
   const action =
-    notification.type === "HANDOVER_REPLY"
+    notification.type === "MANAGER_SCHEDULE_PUBLISHED"
+      ? `közzétette a ${notification.scheduleMonth} havi managerbeosztást`
+      : notification.type === "MANAGER_SCHEDULE_UPDATED"
+        ? `módosította a ${notification.scheduleMonth} havi managerbeosztást`
+        : notification.type === "HANDOVER_REPLY"
       ? "válaszolt az átadóposztodra"
       : notification.handoverReplyId
         ? "megjelölt egy válaszban"

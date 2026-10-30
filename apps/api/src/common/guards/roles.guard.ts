@@ -10,7 +10,7 @@ export class RolesGuard implements CanActivate {
 
   canActivate(context: ExecutionContext) {
     const requiredRoles =
-      this.reflector.getAllAndOverride<Array<UserRole | EmployeeSubRole>>(
+      this.reflector.getAllAndOverride<Array<UserRole | EmployeeSubRole | "STAND_IN_MANAGER">>(
         ROLES_KEY,
         [context.getHandler(), context.getClass()]
       ) ?? [];
@@ -27,7 +27,7 @@ export class RolesGuard implements CanActivate {
     }
 
     return requiredRoles.some(
-      (role) => user.role === role || user.employeeSubRole === role
+      (role) => user.role === role || user.employeeSubRole === role || (role === "STAND_IN_MANAGER" && user.role === "EMPLOYEE" && user.employeeSubRole === "WORKER" && user.isStandInManager)
     );
   }
 }

@@ -21,7 +21,7 @@ export class AvailabilityController {
   constructor(private readonly availabilityService: AvailabilityService) {}
 
   @Get("me")
-  @Roles(UserRole.EMPLOYEE)
+  @Roles(EmployeeSubRole.WORKER)
   getMe(@CurrentUser() user: AuthUser, @Query() query: MyAvailabilityQueryDto) {
     return this.availabilityService.getMe(user, query);
   }
@@ -57,13 +57,13 @@ export class AvailabilityController {
   }
 
   @Post("me/save-draft")
-  @Roles(UserRole.EMPLOYEE)
+  @Roles(EmployeeSubRole.WORKER)
   saveDraft(@CurrentUser() user: AuthUser, @Body() dto: SaveAvailabilityDto) {
     return this.availabilityService.saveMe(user, dto, false);
   }
 
   @Post("me/submit")
-  @Roles(UserRole.EMPLOYEE)
+  @Roles(EmployeeSubRole.WORKER)
   submit(@CurrentUser() user: AuthUser, @Body() dto: SaveAvailabilityDto) {
     return this.availabilityService.saveMe(user, dto, true);
   }

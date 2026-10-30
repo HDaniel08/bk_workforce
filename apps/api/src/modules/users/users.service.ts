@@ -49,6 +49,7 @@ export class UsersService {
   async create(actor: AuthUser, dto: CreateUserDto) {
     const tenantId = this.resolveTenantId(actor, dto.tenantId);
     this.validateWorkerType(dto.employeeSubRole, dto.workerType);
+    if (dto.isStandInManager && dto.employeeSubRole !== EmployeeSubRole.WORKER) throw new BadRequestException("STAND_IN_MANAGER_MUST_BE_WORKER");
 
     await this.ensureTenantExists(tenantId);
 
@@ -65,6 +66,7 @@ export class UsersService {
         phone: dto.phone,
         role: UserRole.EMPLOYEE,
         employeeSubRole: dto.employeeSubRole,
+        isStandInManager: dto.isStandInManager ?? false,
         contractHours: dto.contractHours,
         workerType:
           dto.employeeSubRole === EmployeeSubRole.WORKER ? dto.workerType : null,
@@ -95,6 +97,11 @@ export class UsersService {
   async update(actor: AuthUser, id: string, dto: UpdateUserDto) {
     const existingUser = await this.getAccessibleUser(actor, id);
 
+    if (dto.isActive === false || (dto.employeeSubRole && dto.employeeSubRole !== EmployeeSubRole.MANAGER)) {
+      const owned = await this.prisma.tenant.findFirst({ where: { managerScheduleOwnerId: id }, select: { id: true } });
+      if (owned) throw new BadRequestException("TRANSFER_MANAGER_SCHEDULE_OWNER_FIRST");
+    }
+
     if (existingUser.role === UserRole.ADMIN && actor.role !== UserRole.ADMIN) {
       throw new ForbiddenException("ADMIN_USER_UPDATE_DENIED");
     }
@@ -102,6 +109,7 @@ export class UsersService {
     if (dto.employeeSubRole) {
       this.validateWorkerType(dto.employeeSubRole, dto.workerType ?? undefined);
     }
+    if (dto.isStandInManager && (dto.employeeSubRole ?? existingUser.employeeSubRole) !== EmployeeSubRole.WORKER) throw new BadRequestException("STAND_IN_MANAGER_MUST_BE_WORKER");
 
     const wasActive = existingUser.isActive;
     const user = await this.prisma.user.update({
@@ -111,6 +119,7 @@ export class UsersService {
         lastName: dto.lastName,
         phone: dto.phone,
         employeeSubRole: dto.employeeSubRole,
+        isStandInManager: dto.employeeSubRole === EmployeeSubRole.MANAGER ? false : dto.isStandInManager,
         contractHours: dto.contractHours,
         workerType:
           dto.employeeSubRole === EmployeeSubRole.MANAGER
@@ -280,6 +289,7 @@ export class UsersService {
     phone: string | null;
     role: UserRole;
     employeeSubRole: EmployeeSubRole | null;
+    isStandInManager: boolean;
     workerType: string | null;
     contractHours: string | null;
     mustChangePassword: boolean;
@@ -302,6 +312,7 @@ export class UsersService {
       phone: user.phone,
       role: user.role,
       employeeSubRole: user.employeeSubRole,
+      isStandInManager: user.isStandInManager,
       workerType: user.workerType,
       contractHours: user.contractHours,
       mustChangePassword: user.mustChangePassword,

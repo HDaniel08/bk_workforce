@@ -13,6 +13,7 @@ const emptyForm: UserInput = {
   lastName: "",
   phone: "",
   employeeSubRole: "WORKER",
+  isStandInManager: false,
   workerType: "STUDENT",
   contractHours: "HOURS_4"
 };
@@ -61,6 +62,7 @@ export function ManagerUsersPage() {
       lastName: user.lastName,
       phone: user.phone ?? "",
       employeeSubRole: user.employeeSubRole ?? "WORKER",
+      isStandInManager: user.isStandInManager,
       workerType: user.workerType ?? "STUDENT",
       contractHours: user.contractHours ?? "HOURS_4",
       isActive: user.isActive
@@ -116,6 +118,7 @@ export function ManagerUsersPage() {
                   <h3 className="font-bold">{user.lastName} {user.firstName}</h3>
                   <Badge tone={user.isActive ? "green" : "red"}>{user.isActive ? "Aktív" : "Inaktív"}</Badge>
                   <Badge>{employeeSubRoleLabel(user.employeeSubRole ?? user.role)}</Badge>
+                  {user.isStandInManager ? <Badge>Beugrós manager</Badge> : null}
                 </div>
                 <p className="mt-1 text-sm text-brown/60">
                   {user.email} · {workerTypeLabel(user.workerType) || "n/a"} · {user.contractHours?.replace("HOURS_", "") ?? "?"} óra
@@ -173,14 +176,14 @@ export function ManagerUsersPage() {
               <Select
                 label="Szerepkör"
                 value={form.employeeSubRole}
-                onChange={(event) => setForm({ ...form, employeeSubRole: event.target.value as UserInput["employeeSubRole"] })}
+                onChange={(event) => setForm({ ...form, employeeSubRole: event.target.value as UserInput["employeeSubRole"], isStandInManager: event.target.value === "WORKER" && form.isStandInManager })}
                 options={[
                   { value: "MANAGER", label: "Manager" },
                   { value: "WORKER", label: "Dolgozó" }
                 ]}
               />
               {form.employeeSubRole === "WORKER" ? (
-                <Select
+                <><Select
                   label="Dolgozó típusa"
                   value={form.workerType ?? "STUDENT"}
                   onChange={(event) => setForm({ ...form, workerType: event.target.value as UserInput["workerType"] })}
@@ -188,7 +191,7 @@ export function ManagerUsersPage() {
                     { value: "STUDENT", label: "Diák" },
                     { value: "FULL_TIME", label: "Állandós" }
                   ]}
-                />
+                /><label className="flex items-center gap-2 text-sm font-semibold"><input type="checkbox" checked={Boolean(form.isStandInManager)} onChange={(event) => setForm({ ...form, isStandInManager: event.target.checked })} />Beugrós manager</label></>
               ) : null}
               {error ? <p className="text-sm font-semibold text-red">{error}</p> : null}
               <div className="flex justify-end gap-2">

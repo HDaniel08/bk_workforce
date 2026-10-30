@@ -1,9 +1,12 @@
 ﻿import { useEffect, useState } from "react";
 import { createTenant, getTenants, updateTenant, type Tenant } from "../api/tenants";
+import { assignManagerScheduleOwner } from "../api/manager-schedules";
+import { getUsers, type ManagedUser } from "../api/users";
 import { Badge } from "../components/ui/Badge";
 import { Button } from "../components/ui/Button";
 import { Card } from "../components/ui/Card";
 import { Input } from "../components/ui/Input";
+import { Select } from "../components/ui/Select";
 
 const emptyForm = {
   name: "",
@@ -16,12 +19,18 @@ const emptyForm = {
 
 export function SuperadminTenantsPage() {
   const [tenants, setTenants] = useState<Tenant[]>([]);
+  const [managers, setManagers] = useState<ManagedUser[]>([]);
+  const [ownerSelection, setOwnerSelection] = useState<Record<string, string>>({});
   const [form, setForm] = useState(emptyForm);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   async function load() {
-    setTenants(await getTenants());
+    const [tenantItems, managerItems] = await Promise.all([
+      getTenants(), getUsers({ employeeSubRole: "MANAGER", isActive: "true" })
+    ]);
+    setTenants(tenantItems);
+    setManagers(managerItems);
   }
 
   useEffect(() => {
@@ -59,6 +68,14 @@ export function SuperadminTenantsPage() {
       adminName: "",
       adminEmail: ""
     });
+  }
+
+  async function assignOwner(tenant: Tenant) {
+    const userId = ownerSelection[tenant.id];
+    if (!userId) return;
+    setError(null);
+    try { await assignManagerScheduleOwner(tenant.id, userId); await load(); }
+    catch { setError("A beosztásfelelős kijelölése nem sikerült."); }
   }
 
   return (
@@ -109,6 +126,13 @@ export function SuperadminTenantsPage() {
                   {tenant.isActive ? "Inaktívalas" : "Aktívalas"}
                 </Button>
               </div>
+            </div>
+            <div className="mt-3 flex flex-wrap items-end gap-2">
+              <div className="min-w-56 flex-1"><Select label="Managerbeosztás felelőse" value={ownerSelection[tenant.id] ?? tenant.managerScheduleOwnerId ?? ""} onChange={(event) => setOwnerSelection({ ...ownerSelection, [tenant.id]: event.target.value })} options={[
+                { value: "", label: "Nincs kijelölve" },
+                ...managers.filter((manager) => manager.tenantId === tenant.id).map((manager) => ({ value: manager.id, label: `${manager.lastName} ${manager.firstName}` }))
+              ]} /></div>
+              <Button disabled={!ownerSelection[tenant.id] || ownerSelection[tenant.id] === tenant.managerScheduleOwnerId} onClick={() => assignOwner(tenant)}>Kijelölés</Button>
             </div>
           </Card>
         ))}

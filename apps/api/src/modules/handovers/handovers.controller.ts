@@ -12,7 +12,7 @@ import { HandoverSearchQueryDto } from "./dto/handover-search-query.dto";
 import { HandoversService } from "./handovers.service";
 
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles(EmployeeSubRole.MANAGER)
+@Roles(EmployeeSubRole.MANAGER, "STAND_IN_MANAGER")
 @Controller("handovers")
 export class HandoversController {
   constructor(private readonly handoversService: HandoversService) {}
@@ -67,4 +67,3 @@ export class HandoversController {
     return this.handoversService.deleteReply(user, id);
   }
 }
-

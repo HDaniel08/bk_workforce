@@ -10,6 +10,8 @@ import { Button } from "../components/ui/Button";
 import { Card } from "../components/ui/Card";
 import { Input } from "../components/ui/Input";
 import { vacationRequestStatusLabel } from "../utils/status-labels";
+import { hasManagerRequestCollisionInRange } from "../api/manager-schedules";
+import { authStore } from "../store/auth-store";
 
 const today = new Date().toISOString().slice(0, 10);
 
@@ -25,6 +27,9 @@ export function MyVacationRequestsPage() {
   const [endDate, setEndDate] = useState(today);
   const [reason, setReason] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [collision, setCollision] = useState(false);
+  const [checkingCollision, setCheckingCollision] = useState(false);
+  const isManager = authStore.getUser()?.employeeSubRole === "MANAGER";
 
   async function load() {
     setRequests(await getMyVacationRequests());
@@ -33,6 +38,14 @@ export function MyVacationRequestsPage() {
   useEffect(() => {
     load();
   }, []);
+
+  useEffect(() => {
+    if (!isManager || !startDate || !endDate || endDate < startDate) { setCollision(false); setCheckingCollision(false); return; }
+    let active = true;
+    setCheckingCollision(true);
+    hasManagerRequestCollisionInRange(startDate, endDate).then((exists) => { if (active) setCollision(exists); }).catch(() => {}).finally(() => { if (active) setCheckingCollision(false); });
+    return () => { active = false; };
+  }, [isManager, startDate, endDate]);
 
   async function submit() {
     setError(null);
@@ -45,6 +58,7 @@ export function MyVacationRequestsPage() {
       return;
     }
     try {
+      if (isManager) setCollision(await hasManagerRequestCollisionInRange(startDate, endDate));
       await createVacationRequest({ startDate, endDate, reason });
       setReason("");
       await load();
@@ -63,7 +77,8 @@ export function MyVacationRequestsPage() {
           <Input label="Indok" value={reason} onChange={(event) => setReason(event.target.value)} />
         </div>
         {error ? <p className="text-sm font-semibold text-red">{error}</p> : null}
-        <Button onClick={submit}>Kérelem leadása</Button>
+        {collision ? <p role="status" className="rounded-md bg-amber-100 p-3 text-sm font-semibold">Az időszak legalább egy napjára más manager már adott le kérelmet. A saját kérelmedet ettől még leadhatod.</p> : null}
+        <Button disabled={checkingCollision} onClick={submit}>{checkingCollision ? "Ütközés ellenőrzése…" : "Kérelem leadása"}</Button>
       </Card>
 
       <div className="grid gap-3 md:grid-cols-2">

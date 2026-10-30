@@ -8,17 +8,15 @@ import {
   AvailabilityDayType,
   AvailabilityPeriodType,
   EmployeeSubRole,
+  ManagerDayKind,
+  ManagerMonthStatus,
+  NotificationType,
   Prisma,
   UserRole,
   VacationRequestStatus
 } from "@prisma/client";
 import type { AuthUser } from "../auth/types/auth-user.type";
-import {
-  getMonthStart,
-  getWeekStart,
-  parseDateOnly,
-  toDateOnly
-} from "../availability/helpers/date.helpers";
+import { getWeekStart, parseDateOnly, toDateOnly } from "../availability/helpers/date.helpers";
 import { PrismaService } from "../prisma/prisma.service";
 import type { CreateVacationRequestDto } from "./dto/create-vacation-request.dto";
 import type { ReviewVacationRequestDto } from "./dto/review-vacation-request.dto";
@@ -104,6 +102,9 @@ export class VacationRequestsService {
     });
 
     const affectedDaysCount = await this.fillAvailabilityVacationDays(updated);
+    if (updated.requester.employeeSubRole === EmployeeSubRole.MANAGER) {
+      await this.applyManagerVacation(updated, actor.id);
+    }
 
     await this.createAudit(actor, "VACATION_REQUEST_APPROVED", id, {
       requesterUserId: request.requesterUserId,
@@ -124,6 +125,19 @@ export class VacationRequestsService {
     const updated = await this.prisma.$transaction(async (transaction) => {
       if (wasApproved) {
         await this.removeAvailabilityVacationDays(transaction, request);
+        if (request.requester.employeeSubRole === EmployeeSubRole.MANAGER) {
+          await transaction.managerScheduleDay.deleteMany({
+            where: {
+              userId: request.requesterUserId,
+              kind: ManagerDayKind.VACATION,
+              date: { gte: request.startDate, lte: request.endDate }
+            }
+          });
+          await transaction.managerScheduleMonth.updateMany({
+            where: { tenantId: request.tenantId, monthStartDate: { gte: new Date(Date.UTC(request.startDate.getUTCFullYear(), request.startDate.getUTCMonth(), 1)), lte: request.endDate }, status: ManagerMonthStatus.PUBLISHED },
+            data: { status: ManagerMonthStatus.DRAFT, publishedAt: null }
+          });
+        }
       }
 
       return transaction.vacationRequest.update({
@@ -227,6 +241,9 @@ export class VacationRequestsService {
     if (request.status !== VacationRequestStatus.PENDING) {
       throw new BadRequestException("ONLY_PENDING_CAN_BE_REVIEWED");
     }
+    if (request.requesterUserId === actor.id && request.requester.employeeSubRole === EmployeeSubRole.MANAGER) {
+      throw new ForbiddenException("OWN_VACATION_REVIEW_DENIED");
+    }
 
     return request;
   }
@@ -247,6 +264,9 @@ export class VacationRequestsService {
     if (request.tenantId !== actor.tenantId) {
       throw new ForbiddenException("VACATION_REQUEST_TENANT_DENIED");
     }
+    if (request.requesterUserId === actor.id && request.requester.employeeSubRole === EmployeeSubRole.MANAGER) {
+      throw new ForbiddenException("OWN_VACATION_REVIEW_DENIED");
+    }
     if (request.status === VacationRequestStatus.PENDING) {
       return request;
     }
@@ -266,26 +286,23 @@ export class VacationRequestsService {
     request: Awaited<ReturnType<VacationRequestsService["getTenantPendingRequest"]>>
   ) {
     const requester = request.requester;
+    if (requester.employeeSubRole !== "WORKER") {
+      return 0;
+    }
+
     const dates = this.expandDates(request.startDate, request.endDate);
     const vacationDates = dates.filter((date) => !this.isWeekend(date));
-    const periodType =
-      requester.employeeSubRole === EmployeeSubRole.MANAGER
-        ? AvailabilityPeriodType.MONTHLY
-        : AvailabilityPeriodType.WEEKLY;
+    const periodType = AvailabilityPeriodType.WEEKLY;
 
     for (const date of dates) {
-      const weekStartDate =
-        periodType === AvailabilityPeriodType.WEEKLY ? getWeekStart(date) : null;
-      const monthStartDate =
-        periodType === AvailabilityPeriodType.MONTHLY ? getMonthStart(date) : null;
+      const weekStartDate = getWeekStart(date);
 
       let availability = await this.prisma.availabilityWeek.findFirst({
         where: {
           tenantId: request.tenantId,
           userId: request.requesterUserId,
           periodType,
-          weekStartDate,
-          monthStartDate
+          weekStartDate
         }
       });
 
@@ -295,7 +312,6 @@ export class VacationRequestsService {
           userId: request.requesterUserId,
           periodType,
           weekStartDate,
-          monthStartDate,
           status: "DRAFT"
         }
       });
@@ -341,6 +357,46 @@ export class VacationRequestsService {
     });
 
     return vacationDates.length;
+  }
+
+  private async applyManagerVacation(request: Awaited<ReturnType<VacationRequestsService["getTenantPendingRequest"]>>, actorUserId: string) {
+    const changedPublishedMonths = new Map<string, string>();
+    for (const date of this.expandDates(request.startDate, request.endDate)) {
+      const start = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), 1));
+      const month = await this.prisma.managerScheduleMonth.findUnique({
+        where: { tenantId_monthStartDate: { tenantId: request.tenantId, monthStartDate: start } }
+      });
+      if (!month) continue;
+      const previous = await this.prisma.managerScheduleDay.findUnique({
+        where: { monthId_userId_date: { monthId: month.id, userId: request.requesterUserId, date } },
+        select: { kind: true, startTime: true, endTime: true, note: true }
+      });
+      await this.prisma.managerScheduleDay.upsert({
+        where: { monthId_userId_date: { monthId: month.id, userId: request.requesterUserId, date } },
+        create: { monthId: month.id, userId: request.requesterUserId, date, kind: ManagerDayKind.VACATION, paidMinutes: 480 },
+        update: { kind: ManagerDayKind.VACATION, startTime: null, endTime: null, note: null, paidMinutes: 480 }
+      });
+      if (month.status === ManagerMonthStatus.PUBLISHED && (!previous || previous.kind !== ManagerDayKind.VACATION || previous.startTime || previous.endTime || previous.note)) {
+        changedPublishedMonths.set(month.id, toDateOnly(start).slice(0, 7));
+      }
+    }
+    if (changedPublishedMonths.size > 0) {
+      const managers = await this.prisma.user.findMany({
+        where: { tenantId: request.tenantId, employeeSubRole: EmployeeSubRole.MANAGER, isActive: true, isDeleted: false },
+        select: { id: true }
+      });
+      for (const [monthId, month] of changedPublishedMonths) {
+        await this.prisma.notification.createMany({
+          data: managers.map((manager) => ({
+            tenantId: request.tenantId, recipientUserId: manager.id, actorUserId,
+            type: NotificationType.MANAGER_SCHEDULE_UPDATED,
+            scheduleMonth: month,
+            deduplicationKey: `manager-schedule-vacation:${request.id}:${monthId}:${manager.id}`
+          })),
+          skipDuplicates: true
+        });
+      }
+    }
   }
 
   private async removeAvailabilityVacationDays(

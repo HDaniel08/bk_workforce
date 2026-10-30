@@ -74,9 +74,22 @@ enum ScheduleWeekStatus {
   LOCKED
 }
 
+enum ManagerDayKind {
+  WORK
+  REST
+  VACATION
+}
+
+enum ManagerMonthStatus {
+  DRAFT
+  PUBLISHED
+}
+
 enum NotificationType {
   HANDOVER_MENTION
   HANDOVER_REPLY
+  MANAGER_SCHEDULE_PUBLISHED
+  MANAGER_SCHEDULE_UPDATED
 }
 
 model Tenant {
@@ -86,6 +99,10 @@ model Tenant {
   city                        String?
   address                     String?
   isActive                    Boolean                      @default(true)
+  managerScheduleOwnerId      String?
+  managerScheduleOwner        User?                         @relation("ManagerScheduleOwner", fields: [managerScheduleOwnerId], references: [id], onDelete: SetNull)
+  managerDayRequests          ManagerDayRequest[]
+  managerScheduleMonths       ManagerScheduleMonth[]
   users                       User[]
   auditLogs                   AuditLog[]
   availabilityWeeks           AvailabilityWeek[]
@@ -129,6 +146,7 @@ model User {
   phone                    String?
   role                     UserRole
   employeeSubRole          EmployeeSubRole?
+  isStandInManager         Boolean            @default(false)
   workerType               WorkerType?
   contractHours            ContractHours?
   mustChangePassword       Boolean            @default(false)
@@ -137,6 +155,9 @@ model User {
   deletedAt                DateTime?
   lastLoginAt              DateTime?
   tenant                   Tenant?            @relation(fields: [tenantId], references: [id])
+  ownedManagerSchedules    Tenant[]           @relation("ManagerScheduleOwner")
+  managerDayRequests       ManagerDayRequest[]
+  managerScheduleDays      ManagerScheduleDay[]
   createdAuditLogs         AuditLog[]         @relation("AuditActor")
   availabilityWeeks        AvailabilityWeek[]
   vacationRequests         VacationRequest[]  @relation("VacationRequester")
@@ -156,6 +177,58 @@ model User {
 
   @@index([tenantId])
   @@index([isDeleted])
+}
+
+model ManagerDayRequest {
+  id        String         @id @default(cuid())
+  tenantId  String
+  userId    String
+  date      DateTime       @db.Date
+  kind      ManagerDayKind
+  note      String?
+  tenant    Tenant         @relation(fields: [tenantId], references: [id])
+  user      User           @relation(fields: [userId], references: [id])
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+
+  @@unique([userId, date])
+  @@index([tenantId, date])
+}
+
+model ManagerScheduleMonth {
+  id               String             @id @default(cuid())
+  tenantId         String
+  monthStartDate   DateTime           @db.Date
+  status           ManagerMonthStatus @default(DRAFT)
+  publicationCount Int                @default(0)
+  expectedWorkDays Int                @default(0)
+  expectedRestDays Int                @default(0)
+  publishedAt      DateTime?
+  tenant           Tenant             @relation(fields: [tenantId], references: [id])
+  days             ManagerScheduleDay[]
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+
+  @@unique([tenantId, monthStartDate])
+}
+
+model ManagerScheduleDay {
+  id         String               @id @default(cuid())
+  monthId    String
+  userId     String
+  date       DateTime             @db.Date
+  kind       ManagerDayKind
+  startTime  String?
+  endTime    String?
+  note       String?
+  paidMinutes Int                 @default(0)
+  month      ManagerScheduleMonth @relation(fields: [monthId], references: [id], onDelete: Cascade)
+  user       User                 @relation(fields: [userId], references: [id])
+  createdAt  DateTime             @default(now())
+  updatedAt  DateTime             @updatedAt
+
+  @@unique([monthId, userId, date])
+  @@index([userId, date])
 }
 
 model PasswordResetToken {
@@ -406,6 +479,7 @@ model Notification {
   deduplicationKey    String           @unique
   handoverPostId      String?
   handoverReplyId     String?
+  scheduleMonth       String?
   readAt              DateTime?
   tenant              Tenant           @relation(fields: [tenantId], references: [id])
   recipient           User             @relation("NotificationRecipient", fields: [recipientUserId], references: [id])

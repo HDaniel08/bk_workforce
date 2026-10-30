@@ -7,6 +7,7 @@ export interface Tenant {
   city: string | null;
   address: string | null;
   isActive: boolean;
+  managerScheduleOwnerId: string | null;
   createdAt: string;
   userCount: number;
 }

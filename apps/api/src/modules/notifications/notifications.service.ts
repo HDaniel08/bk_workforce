@@ -86,6 +86,7 @@ export class NotificationsService {
           handoverDate: post?.handoverDate.toISOString().slice(0, 10) ?? null,
           handoverPostId: post?.id ?? null,
           handoverReplyId: notification.handoverReply?.id ?? null,
+          scheduleMonth: notification.scheduleMonth,
           snippet: notification.handoverReply?.content ?? post?.content ?? ""
         };
       })
@@ -124,4 +125,3 @@ export class NotificationsService {
     });
   }
 }
-

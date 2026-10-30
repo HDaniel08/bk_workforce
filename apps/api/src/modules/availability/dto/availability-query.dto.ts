@@ -1,4 +1,4 @@
-import { EmployeeSubRole, WorkerType } from "@prisma/client";
+import { WorkerType } from "@prisma/client";
 import { Type } from "class-transformer";
 import {
   IsDateString,
@@ -14,10 +14,6 @@ export class MyAvailabilityQueryDto {
   @IsOptional()
   @IsString()
   weekStartDate?: string;
-
-  @IsOptional()
-  @IsString()
-  monthStartDate?: string;
 }
 
 export class TeamAvailabilityQueryDto extends MyAvailabilityQueryDto {
@@ -28,10 +24,6 @@ export class TeamAvailabilityQueryDto extends MyAvailabilityQueryDto {
   @IsOptional()
   @IsString()
   userId?: string;
-
-  @IsOptional()
-  @IsEnum(EmployeeSubRole)
-  employeeSubRole?: EmployeeSubRole;
 
   @IsOptional()
   @IsEnum(WorkerType)

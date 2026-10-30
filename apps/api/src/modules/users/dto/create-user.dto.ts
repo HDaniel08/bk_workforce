@@ -1,6 +1,7 @@
 import { ContractHours, EmployeeSubRole, WorkerType } from "@prisma/client";
 import {
   IsEmail,
+  IsBoolean,
   IsEnum,
   IsOptional,
   IsString,
@@ -30,6 +31,10 @@ export class CreateUserDto {
 
   @IsEnum(EmployeeSubRole)
   employeeSubRole!: EmployeeSubRole;
+
+  @IsOptional()
+  @IsBoolean()
+  isStandInManager?: boolean;
 
   @IsEnum(ContractHours)
   contractHours!: ContractHours;

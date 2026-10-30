@@ -1,5 +1,4 @@
 import type { AvailabilityStatus } from "../api/availability";
-import type { ScheduleWeekStatus } from "../api/schedules";
 import type { VacationRequestStatus } from "../api/vacation-requests";
 import type { EmployeeSubRole, UserRole, WorkerType } from "../store/auth-store";
 
@@ -24,15 +23,6 @@ export function vacationRequestStatusLabel(status: VacationRequestStatus) {
     APPROVED: "Elfogadva",
     REJECTED: "Elutasítva",
     CANCELLED: "Visszavonva"
-  };
-  return labels[status];
-}
-
-export function scheduleWeekStatusLabel(status: ScheduleWeekStatus) {
-  const labels: Record<ScheduleWeekStatus, string> = {
-    DRAFT: "Piszkozat",
-    PUBLISHED: "Közzétéve",
-    LOCKED: "Lezárva"
   };
   return labels[status];
 }

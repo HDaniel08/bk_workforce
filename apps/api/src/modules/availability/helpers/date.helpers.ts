@@ -20,28 +20,10 @@ export function getWeekEnd(date: Date) {
   return result;
 }
 
-export function getMonthStart(date: Date) {
-  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), 1));
-}
-
-export function getMonthEnd(date: Date) {
-  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + 1, 0));
-}
-
 export function generateWeekDays(weekStartDate: Date) {
   return Array.from({ length: 7 }, (_, index) => {
     const date = new Date(weekStartDate);
     date.setUTCDate(weekStartDate.getUTCDate() + index);
-    return date;
-  });
-}
-
-export function generateMonthDays(monthStartDate: Date) {
-  const end = getMonthEnd(monthStartDate);
-  const dayCount = end.getUTCDate();
-  return Array.from({ length: dayCount }, (_, index) => {
-    const date = new Date(monthStartDate);
-    date.setUTCDate(index + 1);
     return date;
   });
 }

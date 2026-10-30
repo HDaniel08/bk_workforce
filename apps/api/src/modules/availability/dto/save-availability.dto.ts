@@ -11,10 +11,6 @@ export class SaveAvailabilityDto {
   @IsString()
   weekStartDate?: string | null;
 
-  @IsOptional()
-  @IsString()
-  monthStartDate?: string | null;
-
   @IsArray()
   @ValidateNested({ each: true })
   @Type(() => AvailabilityDayDto)

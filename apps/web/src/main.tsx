@@ -7,18 +7,16 @@ import { DashboardPage } from "./pages/DashboardPage";
 import { ForgotPasswordPage } from "./pages/ForgotPasswordPage";
 import { LoginPage } from "./pages/LoginPage";
 import { ManagerDashboardPage } from "./pages/ManagerDashboardPage";
+import { ManagerMonthlySchedulePage } from "./pages/ManagerMonthlySchedulePage";
+import { ManagerProfilePage } from "./pages/ManagerProfilePage";
+import { ManagerRequestsPage } from "./pages/ManagerRequestsPage";
 import { ManagerHandoversPage } from "./pages/ManagerHandoversPage";
 import { ManagerAvailabilityReportPage } from "./pages/ManagerAvailabilityReportPage";
-import { ManagerManagersAvailabilityPage } from "./pages/ManagerManagersAvailabilityPage";
-import { ManagerMyAvailabilityPage } from "./pages/ManagerMyAvailabilityPage";
-import { ManagerScheduleWritingPage } from "./pages/ManagerScheduleWritingPage";
-import { ManagerSchedulesPage } from "./pages/ManagerSchedulesPage";
 import { ManagerTeamAvailabilityPage } from "./pages/ManagerTeamAvailabilityPage";
 import { ManagerTestEmailPage } from "./pages/ManagerTestEmailPage";
 import { ManagerUsersPage } from "./pages/ManagerUsersPage";
 import { ManagerVacationRequestsPage } from "./pages/ManagerVacationRequestsPage";
 import { MyVacationRequestsPage } from "./pages/MyVacationRequestsPage";
-import { MySchedulePage } from "./pages/MySchedulePage";
 import { SuperadminAuditLogsPage } from "./pages/SuperadminAuditLogsPage";
 import { SuperadminDashboardPage } from "./pages/SuperadminDashboardPage";
 import { SuperadminDeletedUsersPage } from "./pages/SuperadminDeletedUsersPage";
@@ -96,33 +94,12 @@ const router = createBrowserRouter([
             path: "/manager/users",
             element: <ManagerUsersPage />
           },
-          {
-            path: "/manager/handovers",
-            element: <ManagerHandoversPage />
-          },
-          {
-            path: "/manager/schedules",
-            element: <ManagerSchedulesPage />
-          },
-          {
-            path: "/manager/schedule-writing",
-            element: <ManagerScheduleWritingPage />
-          },
-          {
-            path: "/manager/schedule",
-            element: <MySchedulePage />
-          },
+          { path: "/manager/profile", element: <ManagerProfilePage /> },
+          { path: "/manager/requests", element: <ManagerRequestsPage /> },
+          { path: "/manager/monthly-schedule", element: <ManagerMonthlySchedulePage /> },
           {
             path: "/manager/availability",
             element: <ManagerTeamAvailabilityPage />
-          },
-          {
-            path: "/manager/manager-availability",
-            element: <ManagerManagersAvailabilityPage />
-          },
-          {
-            path: "/manager/my-availability",
-            element: <ManagerMyAvailabilityPage />
           },
           {
             path: "/manager/vacation-requests",
@@ -151,15 +128,15 @@ const router = createBrowserRouter([
         ]
       },
       {
+        element: <ProtectedRoute area="HANDOVER" />,
+        children: [{ path: "/manager/handovers", element: <ManagerHandoversPage /> }]
+      },
+      {
         element: <ProtectedRoute area="WORKER" />,
         children: [
           {
             path: "/worker",
             element: <DashboardPage role="Worker" title="Worker dashboard" />
-          },
-          {
-            path: "/worker/schedule",
-            element: <MySchedulePage />
           },
           {
             path: "/worker/availability",

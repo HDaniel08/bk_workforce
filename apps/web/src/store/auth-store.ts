@@ -16,6 +16,7 @@ export interface AuthUser {
   lastName: string;
   role: UserRole;
   employeeSubRole: EmployeeSubRole | null;
+  isStandInManager: boolean;
   workerType: WorkerType | null;
   contractHours?: ContractHours | null;
   mustChangePassword: boolean;

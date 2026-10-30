@@ -261,6 +261,7 @@ export class AuthService {
       employeeSubRole: user.employeeSubRole,
       workerType: user.workerType,
       contractHours: user.contractHours,
+      isStandInManager: user.isStandInManager,
       mustChangePassword: user.mustChangePassword
     };
   }

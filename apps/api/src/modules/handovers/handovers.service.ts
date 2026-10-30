@@ -116,7 +116,7 @@ export class HandoversService {
       where: {
         tenantId,
         role: UserRole.EMPLOYEE,
-        employeeSubRole: EmployeeSubRole.MANAGER,
+        OR: [{ employeeSubRole: EmployeeSubRole.MANAGER }, { employeeSubRole: EmployeeSubRole.WORKER, isStandInManager: true }],
         isActive: true,
         isDeleted: false
       },
@@ -339,7 +339,7 @@ export class HandoversService {
         id: { in: ids },
         tenantId,
         role: UserRole.EMPLOYEE,
-        employeeSubRole: EmployeeSubRole.MANAGER,
+        OR: [{ employeeSubRole: EmployeeSubRole.MANAGER }, { employeeSubRole: EmployeeSubRole.WORKER, isStandInManager: true }],
         isActive: true,
         isDeleted: false
       }

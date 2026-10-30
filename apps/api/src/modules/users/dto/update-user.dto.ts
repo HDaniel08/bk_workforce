@@ -28,6 +28,10 @@ export class UpdateUserDto {
   employeeSubRole?: EmployeeSubRole;
 
   @IsOptional()
+  @IsBoolean()
+  isStandInManager?: boolean;
+
+  @IsOptional()
   @IsEnum(ContractHours)
   contractHours?: ContractHours;
 

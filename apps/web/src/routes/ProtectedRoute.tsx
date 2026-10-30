@@ -1,7 +1,7 @@
 import { Navigate, Outlet, useLocation } from "react-router-dom";
 import { authStore } from "../store/auth-store";
 
-type ProtectedArea = "ADMIN" | "MANAGER" | "WORKER";
+type ProtectedArea = "ADMIN" | "MANAGER" | "WORKER" | "HANDOVER";
 
 interface ProtectedRouteProps {
   area: ProtectedArea;
@@ -34,6 +34,10 @@ export function ProtectedRoute({ area }: ProtectedRouteProps) {
     area === "WORKER" &&
     (user.role !== "EMPLOYEE" || user.employeeSubRole !== "WORKER")
   ) {
+    return <Navigate to="/login" replace />;
+  }
+
+  if (area === "HANDOVER" && (user.role !== "EMPLOYEE" || (user.employeeSubRole !== "MANAGER" && !(user.employeeSubRole === "WORKER" && user.isStandInManager)))) {
     return <Navigate to="/login" replace />;
   }
 
