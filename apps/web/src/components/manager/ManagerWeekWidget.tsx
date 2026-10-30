@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { getManagerWeek, type ManagerWeek } from "../../api/manager-schedules";
+import { getManagerWeek, type ManagerDayKind, type ManagerWeek } from "../../api/manager-schedules";
 import { formatDateOnly, getCurrentWeekStartDate, getWeekDates } from "../../utils/date";
 import { Button } from "../ui/Button";
 import { Card } from "../ui/Card";
@@ -11,8 +11,8 @@ function moveWeek(value: string, weeks: number) {
   return formatDateOnly(date);
 }
 
-function kindLabel(kind: "WORK" | "REST" | "VACATION") {
-  return kind === "WORK" ? "Munka" : kind === "REST" ? "Pihenő" : "Szabi";
+function kindLabel(kind: ManagerDayKind) {
+  return kind === "WORK" ? "Munka" : kind === "REST" ? "Pihenő" : kind === "VACATION" ? "Szabi" : "Táppénz";
 }
 
 export function ManagerWeekWidget() {

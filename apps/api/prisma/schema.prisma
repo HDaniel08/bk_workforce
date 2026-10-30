@@ -78,6 +78,7 @@ enum ManagerDayKind {
   WORK
   REST
   VACATION
+  SICK_LEAVE
 }
 
 enum ManagerMonthStatus {

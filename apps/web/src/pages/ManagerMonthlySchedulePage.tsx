@@ -29,7 +29,7 @@ function monthWeeks(month: string) {
   return weeks;
 }
 
-function label(kind: ManagerDayKind) { return kind === "WORK" ? "Munka" : kind === "REST" ? "Pihenő" : "Szabadság"; }
+function label(kind: ManagerDayKind) { return kind === "WORK" ? "Munka" : kind === "REST" ? "Pihenő" : kind === "VACATION" ? "Szabadság" : "Táppénz"; }
 function hours(minutes: number) { return `${(minutes / 60).toLocaleString("hu-HU", { maximumFractionDigits: 1 })} ó`; }
 function signedHours(minutes: number) { return `${minutes > 0 ? "+" : ""}${hours(minutes)}`; }
 
@@ -192,7 +192,7 @@ export function ManagerMonthlySchedulePage() {
             {selectedVacation ? <div className="rounded-md bg-cream p-3 text-sm"><strong>{selectedVacation.status === "APPROVED" ? "Jóváhagyott" : "Függőben lévő"} szabadságkérelem</strong>{selectedVacation.reason ? <p className="mt-1">{selectedVacation.reason}</p> : null}</div> : null}
             <fieldset>
               <legend className="mb-2 text-sm font-semibold text-brown">Nap típusa</legend>
-              {selectedVacation?.status === "APPROVED" ? <div className="rounded-md border border-red/30 bg-red/10 p-3 text-sm font-bold text-red">Szabadság · jóváhagyott kérelem</div> : <div className="grid grid-cols-2 gap-2">{(["WORK", "REST"] as const).map((kind) => <button key={kind} type="button" aria-pressed={editor.kind === kind} onClick={() => setEditor({ ...editor, kind })} className={`rounded-md border px-3 py-3 text-sm font-bold transition ${editor.kind === kind ? "border-red bg-red text-white" : "border-brown/20 bg-cream/40 text-brown hover:bg-cream"}`}>{label(kind)}</button>)}</div>}
+              {selectedVacation?.status === "APPROVED" ? <div className="rounded-md border border-red/30 bg-red/10 p-3 text-sm font-bold text-red">Szabadság · jóváhagyott kérelem</div> : <div className="grid grid-cols-2 gap-2">{(["WORK", "REST", "VACATION", "SICK_LEAVE"] as const).map((kind) => <button key={kind} type="button" aria-pressed={editor.kind === kind} onClick={() => setEditor({ ...editor, kind })} className={`rounded-md border px-3 py-3 text-sm font-bold transition ${editor.kind === kind ? "border-red bg-red text-white" : "border-brown/20 bg-cream/40 text-brown hover:bg-cream"}`}>{label(kind)}</button>)}</div>}
             </fieldset>
             {editor.kind === "WORK" ? <div className="grid grid-cols-2 gap-2">
               <Input label="Kezdés" type="time" value={editor.startTime} onChange={(event) => setEditor({ ...editor, startTime: event.target.value })} />

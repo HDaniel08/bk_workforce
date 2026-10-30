@@ -1,0 +1,1 @@
+ALTER TYPE "ManagerDayKind" ADD VALUE 'SICK_LEAVE';

@@ -1,6 +1,6 @@
 import { api } from "../lib/api";
 
-export type ManagerDayKind = "WORK" | "REST" | "VACATION";
+export type ManagerDayKind = "WORK" | "REST" | "VACATION" | "SICK_LEAVE";
 export type ManagerMonthStatus = "DRAFT" | "PUBLISHED";
 export type ManagerPerson = { id: string; firstName: string; lastName: string; isStandInManager?: boolean; contractHours?: "HOURS_4" | "HOURS_6" | "HOURS_8" | null };
 export type ManagerDayRequest = { userId: string; date: string; kind: ManagerDayKind; note: string | null };

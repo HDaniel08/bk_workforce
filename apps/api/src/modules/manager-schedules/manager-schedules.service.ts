@@ -113,7 +113,7 @@ export class ManagerSchedulesService {
 
   async saveRequest(actor: AuthUser, dto: ManagerRequestDto) {
     const tenantId = this.tenantId(actor);
-    if (dto.kind === ManagerDayKind.VACATION) throw new BadRequestException("USE_VACATION_REQUESTS");
+    if (dto.kind !== ManagerDayKind.WORK && dto.kind !== ManagerDayKind.REST) throw new BadRequestException("INVALID_MANAGER_REQUEST_KIND");
     const date = parseDay(dto.date);
     const item = await this.prisma.managerDayRequest.upsert({
       where: { userId_date: { userId: actor.id, date } },
@@ -158,8 +158,8 @@ export class ManagerSchedulesService {
     if (record.status !== ManagerMonthStatus.DRAFT) throw new BadRequestException("MONTH_REOPEN_REQUIRED");
     const approved = await this.prisma.vacationRequest.findFirst({ where: { tenantId, requesterUserId: dto.userId, status: VacationRequestStatus.APPROVED, startDate: { lte: date }, endDate: { gte: date } }, select: { id: true } });
     if (approved && dto.kind !== ManagerDayKind.VACATION) throw new BadRequestException("APPROVED_VACATION_REQUIRED");
-    if (!approved && dto.kind === ManagerDayKind.VACATION) throw new BadRequestException("APPROVED_VACATION_REQUIRED");
-    const minutes = dto.kind === ManagerDayKind.WORK ? paidMinutes(dto.startTime, dto.endTime) : dto.kind === ManagerDayKind.VACATION ? contractMinutes(target.contractHours) : 0;
+    const isFullPaidDay = dto.kind === ManagerDayKind.VACATION || dto.kind === ManagerDayKind.SICK_LEAVE;
+    const minutes = dto.kind === ManagerDayKind.WORK ? paidMinutes(dto.startTime, dto.endTime) : isFullPaidDay ? contractMinutes(target.contractHours) : 0;
     const data = { kind: dto.kind, startTime: dto.kind === ManagerDayKind.WORK ? dto.startTime : null, endTime: dto.kind === ManagerDayKind.WORK ? dto.endTime : null, note: dto.note?.trim() ?? "", paidMinutes: minutes };
     const item = await this.prisma.managerScheduleDay.upsert({ where: { monthId_userId_date: { monthId: record.id, userId: dto.userId, date } }, create: { monthId: record.id, userId: dto.userId, date, ...data }, update: data });
     await this.audit(actor, tenantId, "MANAGER_SCHEDULE_DAY_UPDATED", "ManagerScheduleDay", item.id, { month, userId: dto.userId, date: dto.date, kind: dto.kind, startTime: data.startTime, endTime: data.endTime, paidMinutes: minutes });
@@ -279,7 +279,7 @@ export class ManagerSchedulesService {
     }
     const contractMinutesByUserId = new Map(visibleManagers.map((manager) => [manager.id, contractMinutes(manager.contractHours)]));
     const actualMinutes = (day: { userId: string; date: Date; kind: ManagerDayKind; paidMinutes: number }) =>
-      approvedDates.has(`${day.userId}:${dateOnly(day.date)}`) || day.kind === ManagerDayKind.VACATION ? contractMinutesByUserId.get(day.userId) ?? 480 : day.paidMinutes;
+      approvedDates.has(`${day.userId}:${dateOnly(day.date)}`) || day.kind === ManagerDayKind.VACATION || day.kind === ManagerDayKind.SICK_LEAVE ? contractMinutesByUserId.get(day.userId) ?? 480 : day.paidMinutes;
     const balance = visibleManagers.filter((manager) => !manager.isStandInManager && (isOwner || manager.id === actor.id)).map((manager) => {
       const approvedForManager = [...approvedDates]
         .filter((key) => key.startsWith(`${manager.id}:`))
@@ -306,8 +306,8 @@ export class ManagerSchedulesService {
       expectedRestDays: visibleMonth ? current?.expectedRestDays ?? 0 : 0,
       cycleStart: dateOnly(cycleStart), cycleEnd: dateOnly(new Date(cycleEnd.getTime() - 86400000)),
       managers: visibleManagers,
-      days: dayRows.map((item) => ({ userId: item.userId, date: dateOnly(item.date), kind: item.kind, startTime: item.startTime, endTime: item.endTime, note: item.note, paidMinutes: item.kind === ManagerDayKind.VACATION ? contractMinutesByUserId.get(item.userId) ?? 480 : item.paidMinutes })),
-      contextDays: contextDays.map((item) => ({ userId: item.userId, date: dateOnly(item.date), kind: item.kind, startTime: item.startTime, endTime: item.endTime, note: item.note, paidMinutes: item.kind === ManagerDayKind.VACATION ? contractMinutesByUserId.get(item.userId) ?? 480 : item.paidMinutes })),
+      days: dayRows.map((item) => ({ userId: item.userId, date: dateOnly(item.date), kind: item.kind, startTime: item.startTime, endTime: item.endTime, note: item.note, paidMinutes: item.kind === ManagerDayKind.VACATION || item.kind === ManagerDayKind.SICK_LEAVE ? contractMinutesByUserId.get(item.userId) ?? 480 : item.paidMinutes })),
+      contextDays: contextDays.map((item) => ({ userId: item.userId, date: dateOnly(item.date), kind: item.kind, startTime: item.startTime, endTime: item.endTime, note: item.note, paidMinutes: item.kind === ManagerDayKind.VACATION || item.kind === ManagerDayKind.SICK_LEAVE ? contractMinutesByUserId.get(item.userId) ?? 480 : item.paidMinutes })),
       requests: requestRows, vacations: vacationRows, balance
     };
   }
