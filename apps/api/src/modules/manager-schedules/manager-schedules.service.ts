@@ -44,8 +44,10 @@ function contractMinutes(contractHours: ContractHours | null) {
 export class ManagerSchedulesService {
   constructor(private readonly prisma: PrismaService) {}
 
-  private tenantId(actor: AuthUser) {
-    if (actor.employeeSubRole !== EmployeeSubRole.MANAGER || !actor.tenantId) {
+  private tenantId(actor: AuthUser, allowStandInManager = false) {
+    const isManager = actor.employeeSubRole === EmployeeSubRole.MANAGER;
+    const isStandInManager = actor.employeeSubRole === EmployeeSubRole.WORKER && actor.isStandInManager;
+    if ((!isManager && !(allowStandInManager && isStandInManager)) || !actor.tenantId) {
       throw new ForbiddenException("MANAGER_REQUIRED");
     }
     return actor.tenantId;
@@ -223,7 +225,7 @@ export class ManagerSchedulesService {
   }
 
   async getWeek(actor: AuthUser, value: string) {
-    const tenantId = this.tenantId(actor);
+    const tenantId = this.tenantId(actor, true);
     const start = parseDay(value);
     if (start.getUTCDay() !== 1) throw new BadRequestException("WEEK_MUST_START_MONDAY");
     const end = new Date(start);
@@ -237,7 +239,7 @@ export class ManagerSchedulesService {
   }
 
   async getMonth(actor: AuthUser, month: string) {
-    const tenantId = this.tenantId(actor);
+    const tenantId = this.tenantId(actor, true);
     const start = monthStart(month);
     const end = nextMonth(start);
     const cycleStart = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth() - (start.getUTCMonth() % 2), 1));

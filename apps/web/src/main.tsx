@@ -96,7 +96,6 @@ const router = createBrowserRouter([
           },
           { path: "/manager/profile", element: <ManagerProfilePage /> },
           { path: "/manager/requests", element: <ManagerRequestsPage /> },
-          { path: "/manager/monthly-schedule", element: <ManagerMonthlySchedulePage /> },
           {
             path: "/manager/availability",
             element: <ManagerTeamAvailabilityPage />
@@ -126,6 +125,10 @@ const router = createBrowserRouter([
             element: <ManagerTestEmailPage />
           }
         ]
+      },
+      {
+        element: <ProtectedRoute area="MANAGER_SCHEDULE" />,
+        children: [{ path: "/manager/monthly-schedule", element: <ManagerMonthlySchedulePage /> }]
       },
       {
         element: <ProtectedRoute area="HANDOVER" />,

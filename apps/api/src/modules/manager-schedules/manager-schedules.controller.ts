@@ -60,13 +60,13 @@ export class ManagerSchedulesController {
   }
 
   @Get("months/:month")
-  @Roles(EmployeeSubRole.MANAGER)
+  @Roles(EmployeeSubRole.MANAGER, "STAND_IN_MANAGER")
   getMonth(@CurrentUser() actor: AuthUser, @Param("month") month: string) {
     return this.service.getMonth(actor, month);
   }
 
   @Get("weeks/:weekStart")
-  @Roles(EmployeeSubRole.MANAGER)
+  @Roles(EmployeeSubRole.MANAGER, "STAND_IN_MANAGER")
   getWeek(@CurrentUser() actor: AuthUser, @Param("weekStart") weekStart: string) {
     return this.service.getWeek(actor, weekStart);
   }

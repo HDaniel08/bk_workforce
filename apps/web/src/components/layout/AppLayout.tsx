@@ -87,7 +87,7 @@ export function AppLayout() {
       : user?.employeeSubRole === "MANAGER"
         ? managerItems
         : user?.isStandInManager
-          ? [...workerItems, { to: "/manager/handovers", label: "Átadó" }]
+          ? [...workerItems, { to: "/manager/monthly-schedule", label: "Managerbeosztás" }, { to: "/manager/handovers", label: "Átadó" }]
           : workerItems;
   const userName = user ? `${user.lastName} ${user.firstName}` : "BK Workforce";
   const hasMoreMenu = items.length > 5;
