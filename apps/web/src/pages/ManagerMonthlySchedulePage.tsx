@@ -125,7 +125,7 @@ export function ManagerMonthlySchedulePage() {
         <div className="w-40"><Input label="Elvárt pihenőnap" type="number" min={0} max={31} value={restTarget} disabled={data.status !== "DRAFT"} onChange={(event) => setRestTarget(Number(event.target.value))} /></div>
         <Button onClick={saveTargets}>Célok mentése</Button><Button variant="secondary" onClick={() => changeStatus("PUBLISHED")}>Közzététel</Button>
       </div> : data?.isOwner ? <Button onClick={() => changeStatus("DRAFT")}>Vissza piszkozatba</Button> : null}
-      {data?.isOwner && data.status === "DRAFT" ? <p className="text-sm text-brown/70">Kéthavi időegyenleg: {data.cycleStart} – {data.cycleEnd}. Munkaóra = műszakhossz mínusz 1 óra szünet; a jóváhagyott szabadság 8 órát ér.</p> : null}
+      {data?.isOwner && data.status === "DRAFT" ? <p className="text-sm text-brown/70">Kéthavi időegyenleg: {data.cycleStart} – {data.cycleEnd}. Munkaóra = műszakhossz mínusz 1 óra szünet; a jóváhagyott szabadság a profil szerinti napi munkaidőt éri.</p> : null}
       {error && !editor ? <p className="text-sm font-semibold text-red">{error}</p> : null}
       {message ? <p className="text-sm font-semibold text-green">{message}</p> : null}
     </Card>
@@ -145,7 +145,7 @@ export function ManagerMonthlySchedulePage() {
             <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 bg-cream/60 px-3 py-2">
               <strong className="text-sm">{manager.lastName} {manager.firstName}</strong>
               {data.isOwner && data.status === "DRAFT" && balance ? <div className="flex flex-wrap gap-x-3 text-[11px] text-brown/70">
-                <span>{hours(balance.currentMinutes)} / {data.expectedWorkDays * 8} ó</span>
+                <span>{hours(balance.currentMinutes)} / {hours(balance.expectedCurrentMinutes)}</span>
                 <span>Havi: {signedHours(balance.monthDifferenceMinutes)}</span>
                 <span>2 havi: {signedHours(balance.cycleDifferenceMinutes)}</span>
                 <span>Pihenő: {balance.currentRestDays} / {data.expectedRestDays}</span>

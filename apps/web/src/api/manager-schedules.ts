@@ -2,11 +2,11 @@ import { api } from "../lib/api";
 
 export type ManagerDayKind = "WORK" | "REST" | "VACATION";
 export type ManagerMonthStatus = "DRAFT" | "PUBLISHED";
-export type ManagerPerson = { id: string; firstName: string; lastName: string; isStandInManager?: boolean };
+export type ManagerPerson = { id: string; firstName: string; lastName: string; isStandInManager?: boolean; contractHours?: "HOURS_4" | "HOURS_6" | "HOURS_8" | null };
 export type ManagerDayRequest = { userId: string; date: string; kind: ManagerDayKind; note: string | null };
 export type ManagerScheduleDay = ManagerDayRequest & { startTime: string | null; endTime: string | null; paidMinutes: number };
 export type ManagerVacation = { id: string; requesterUserId: string; startDate: string; endDate: string; status: "PENDING" | "APPROVED"; reason: string | null };
-export type ManagerBalance = { userId: string; currentMinutes: number; currentRestDays: number; monthDifferenceMinutes: number; cycleDifferenceMinutes: number };
+export type ManagerBalance = { userId: string; currentMinutes: number; expectedCurrentMinutes: number; currentRestDays: number; monthDifferenceMinutes: number; cycleDifferenceMinutes: number };
 export type ManagerMonth = {
   month: string;
   status: ManagerMonthStatus;

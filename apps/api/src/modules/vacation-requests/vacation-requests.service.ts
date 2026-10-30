@@ -7,6 +7,7 @@ import {
 import {
   AvailabilityDayType,
   AvailabilityPeriodType,
+  ContractHours,
   EmployeeSubRole,
   ManagerDayKind,
   ManagerMonthStatus,
@@ -21,6 +22,12 @@ import { PrismaService } from "../prisma/prisma.service";
 import type { CreateVacationRequestDto } from "./dto/create-vacation-request.dto";
 import type { ReviewVacationRequestDto } from "./dto/review-vacation-request.dto";
 import type { VacationRequestQueryDto } from "./dto/vacation-request-query.dto";
+
+function contractMinutes(contractHours: ContractHours | null) {
+  if (contractHours === ContractHours.HOURS_4) return 240;
+  if (contractHours === ContractHours.HOURS_6) return 360;
+  return 480;
+}
 
 @Injectable()
 export class VacationRequestsService {
@@ -361,6 +368,7 @@ export class VacationRequestsService {
 
   private async applyManagerVacation(request: Awaited<ReturnType<VacationRequestsService["getTenantPendingRequest"]>>, actorUserId: string) {
     const changedPublishedMonths = new Map<string, string>();
+    const paidMinutes = contractMinutes(request.requester.contractHours);
     for (const date of this.expandDates(request.startDate, request.endDate)) {
       const start = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), 1));
       const month = await this.prisma.managerScheduleMonth.findUnique({
@@ -373,8 +381,8 @@ export class VacationRequestsService {
       });
       await this.prisma.managerScheduleDay.upsert({
         where: { monthId_userId_date: { monthId: month.id, userId: request.requesterUserId, date } },
-        create: { monthId: month.id, userId: request.requesterUserId, date, kind: ManagerDayKind.VACATION, paidMinutes: 480 },
-        update: { kind: ManagerDayKind.VACATION, startTime: null, endTime: null, note: null, paidMinutes: 480 }
+        create: { monthId: month.id, userId: request.requesterUserId, date, kind: ManagerDayKind.VACATION, paidMinutes },
+        update: { kind: ManagerDayKind.VACATION, startTime: null, endTime: null, note: null, paidMinutes }
       });
       if (month.status === ManagerMonthStatus.PUBLISHED && (!previous || previous.kind !== ManagerDayKind.VACATION || previous.startTime || previous.endTime || previous.note)) {
         changedPublishedMonths.set(month.id, toDateOnly(start).slice(0, 7));

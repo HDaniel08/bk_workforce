@@ -1,5 +1,5 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
-import { EmployeeSubRole, ManagerDayKind, ManagerMonthStatus, NotificationType, Prisma, UserRole, VacationRequestStatus } from "@prisma/client";
+import { ContractHours, EmployeeSubRole, ManagerDayKind, ManagerMonthStatus, NotificationType, Prisma, UserRole, VacationRequestStatus } from "@prisma/client";
 import type { AuthUser } from "../auth/types/auth-user.type";
 import { PrismaService } from "../prisma/prisma.service";
 import type { ManagerRequestDto, MonthTargetsDto, ScheduleDayDto } from "./manager-schedules.dto";
@@ -32,6 +32,12 @@ function paidMinutes(start?: string, end?: string) {
   if (duration <= 0) duration += 1440;
   if (duration <= 60 || duration >= 1440) throw new BadRequestException("INVALID_SHIFT_LENGTH");
   return duration - 60;
+}
+
+function contractMinutes(contractHours: ContractHours | null) {
+  if (contractHours === ContractHours.HOURS_4) return 240;
+  if (contractHours === ContractHours.HOURS_6) return 360;
+  return 480;
 }
 
 @Injectable()
@@ -144,14 +150,14 @@ export class ManagerSchedulesService {
     const end = nextMonth(start);
     const date = parseDay(dto.date);
     if (date < start || date >= end) throw new BadRequestException("DATE_OUTSIDE_MONTH");
-    const target = await this.prisma.user.findFirst({ where: { id: dto.userId, tenantId, role: UserRole.EMPLOYEE, OR: [{ employeeSubRole: EmployeeSubRole.MANAGER }, { employeeSubRole: EmployeeSubRole.WORKER, isStandInManager: true }], isActive: true, isDeleted: false }, select: { id: true } });
+    const target = await this.prisma.user.findFirst({ where: { id: dto.userId, tenantId, role: UserRole.EMPLOYEE, OR: [{ employeeSubRole: EmployeeSubRole.MANAGER }, { employeeSubRole: EmployeeSubRole.WORKER, isStandInManager: true }], isActive: true, isDeleted: false }, select: { id: true, contractHours: true } });
     if (!target) throw new BadRequestException("ACTIVE_MANAGER_REQUIRED");
     const record = await this.ensureMonth(tenantId, start);
     if (record.status !== ManagerMonthStatus.DRAFT) throw new BadRequestException("MONTH_REOPEN_REQUIRED");
     const approved = await this.prisma.vacationRequest.findFirst({ where: { tenantId, requesterUserId: dto.userId, status: VacationRequestStatus.APPROVED, startDate: { lte: date }, endDate: { gte: date } }, select: { id: true } });
     if (approved && dto.kind !== ManagerDayKind.VACATION) throw new BadRequestException("APPROVED_VACATION_REQUIRED");
     if (!approved && dto.kind === ManagerDayKind.VACATION) throw new BadRequestException("APPROVED_VACATION_REQUIRED");
-    const minutes = dto.kind === ManagerDayKind.WORK ? paidMinutes(dto.startTime, dto.endTime) : dto.kind === ManagerDayKind.VACATION ? 480 : 0;
+    const minutes = dto.kind === ManagerDayKind.WORK ? paidMinutes(dto.startTime, dto.endTime) : dto.kind === ManagerDayKind.VACATION ? contractMinutes(target.contractHours) : 0;
     const data = { kind: dto.kind, startTime: dto.kind === ManagerDayKind.WORK ? dto.startTime : null, endTime: dto.kind === ManagerDayKind.WORK ? dto.endTime : null, note: dto.note?.trim() ?? "", paidMinutes: minutes };
     const item = await this.prisma.managerScheduleDay.upsert({ where: { monthId_userId_date: { monthId: record.id, userId: dto.userId, date } }, create: { monthId: record.id, userId: dto.userId, date, ...data }, update: data });
     await this.audit(actor, tenantId, "MANAGER_SCHEDULE_DAY_UPDATED", "ManagerScheduleDay", item.id, { month, userId: dto.userId, date: dto.date, kind: dto.kind, startTime: data.startTime, endTime: data.endTime, paidMinutes: minutes });
@@ -238,7 +244,7 @@ export class ManagerSchedulesService {
     const cycleEnd = nextMonth(cycleStart, 2);
     const [tenant, managers, months, requests, vacations] = await Promise.all([
       this.prisma.tenant.findUnique({ where: { id: tenantId }, select: { managerScheduleOwnerId: true } }),
-      this.prisma.user.findMany({ where: { tenantId, role: UserRole.EMPLOYEE, OR: [{ employeeSubRole: EmployeeSubRole.MANAGER }, { employeeSubRole: EmployeeSubRole.WORKER, isStandInManager: true }], isActive: true, isDeleted: false }, select: { id: true, firstName: true, lastName: true, isStandInManager: true }, orderBy: [{ lastName: "asc" }, { firstName: "asc" }] }),
+      this.prisma.user.findMany({ where: { tenantId, role: UserRole.EMPLOYEE, OR: [{ employeeSubRole: EmployeeSubRole.MANAGER }, { employeeSubRole: EmployeeSubRole.WORKER, isStandInManager: true }], isActive: true, isDeleted: false }, select: { id: true, firstName: true, lastName: true, isStandInManager: true, contractHours: true }, orderBy: [{ lastName: "asc" }, { firstName: "asc" }] }),
       this.prisma.managerScheduleMonth.findMany({ where: { tenantId, monthStartDate: { gte: cycleStart, lt: cycleEnd } }, include: { days: true } }),
       this.prisma.managerDayRequest.findMany({ where: { tenantId, date: { gte: start, lt: end } } }),
       this.prisma.vacationRequest.findMany({ where: { tenantId, requester: { employeeSubRole: EmployeeSubRole.MANAGER }, status: { in: [VacationRequestStatus.PENDING, VacationRequestStatus.APPROVED] }, startDate: { lt: cycleEnd }, endDate: { gte: cycleStart } }, select: { id: true, requesterUserId: true, startDate: true, endDate: true, status: true, reason: true } })
@@ -269,8 +275,9 @@ export class ManagerSchedulesService {
         approvedDates.add(`${vacation.requesterUserId}:${dateOnly(cursor)}`);
       }
     }
+    const contractMinutesByUserId = new Map(visibleManagers.map((manager) => [manager.id, contractMinutes(manager.contractHours)]));
     const actualMinutes = (day: { userId: string; date: Date; kind: ManagerDayKind; paidMinutes: number }) =>
-      approvedDates.has(`${day.userId}:${dateOnly(day.date)}`) || day.kind === ManagerDayKind.VACATION ? 480 : day.paidMinutes;
+      approvedDates.has(`${day.userId}:${dateOnly(day.date)}`) || day.kind === ManagerDayKind.VACATION ? contractMinutesByUserId.get(day.userId) ?? 480 : day.paidMinutes;
     const balance = visibleManagers.filter((manager) => !manager.isStandInManager && (isOwner || manager.id === actor.id)).map((manager) => {
       const approvedForManager = [...approvedDates]
         .filter((key) => key.startsWith(`${manager.id}:`))
@@ -278,15 +285,17 @@ export class ManagerSchedulesService {
       const managerCurrentDays = dayRows.filter((day) => day.userId === manager.id);
       const currentScheduledDates = new Set(managerCurrentDays.map((day) => dateOnly(day.date)));
       const currentVacationOnly = approvedForManager.filter((date) => date >= dateOnly(start) && date < dateOnly(end) && !currentScheduledDates.has(date)).length;
-      const currentMinutes = managerCurrentDays.reduce((sum, day) => sum + actualMinutes(day), 0) + currentVacationOnly * 480;
+      const dailyContractMinutes = contractMinutes(manager.contractHours);
+      const currentMinutes = managerCurrentDays.reduce((sum, day) => sum + actualMinutes(day), 0) + currentVacationOnly * dailyContractMinutes;
       const currentRestDays = managerCurrentDays.filter((day) => day.kind === ManagerDayKind.REST && !approvedDates.has(`${manager.id}:${dateOnly(day.date)}`)).length;
       const cycleMonths = months.filter((item) => isOwner || item.status === ManagerMonthStatus.PUBLISHED);
       const cycleDays = cycleMonths.flatMap((item) => item.days).filter((day) => day.userId === manager.id);
       const cycleScheduledDates = new Set(cycleDays.map((day) => dateOnly(day.date)));
       const cycleVacationOnly = approvedForManager.filter((date) => !cycleScheduledDates.has(date)).length;
-      const cycleMinutes = cycleDays.reduce((sum, day) => sum + actualMinutes(day), 0) + cycleVacationOnly * 480;
-      const expectedCycleMinutes = cycleMonths.reduce((sum, item) => sum + item.expectedWorkDays * 480, 0);
-      return { userId: manager.id, currentMinutes, currentRestDays, monthDifferenceMinutes: currentMinutes - (current?.expectedWorkDays ?? 0) * 480, cycleDifferenceMinutes: cycleMinutes - expectedCycleMinutes };
+      const cycleMinutes = cycleDays.reduce((sum, day) => sum + actualMinutes(day), 0) + cycleVacationOnly * dailyContractMinutes;
+      const expectedCurrentMinutes = (current?.expectedWorkDays ?? 0) * dailyContractMinutes;
+      const expectedCycleMinutes = cycleMonths.reduce((sum, item) => sum + item.expectedWorkDays * dailyContractMinutes, 0);
+      return { userId: manager.id, currentMinutes, expectedCurrentMinutes, currentRestDays, monthDifferenceMinutes: currentMinutes - expectedCurrentMinutes, cycleDifferenceMinutes: cycleMinutes - expectedCycleMinutes };
     });
     return {
       month, status: visibleMonth ? current?.status ?? ManagerMonthStatus.DRAFT : ManagerMonthStatus.DRAFT,
@@ -295,8 +304,8 @@ export class ManagerSchedulesService {
       expectedRestDays: visibleMonth ? current?.expectedRestDays ?? 0 : 0,
       cycleStart: dateOnly(cycleStart), cycleEnd: dateOnly(new Date(cycleEnd.getTime() - 86400000)),
       managers: visibleManagers,
-      days: dayRows.map((item) => ({ userId: item.userId, date: dateOnly(item.date), kind: item.kind, startTime: item.startTime, endTime: item.endTime, note: item.note, paidMinutes: item.kind === ManagerDayKind.VACATION ? 480 : item.paidMinutes })),
-      contextDays: contextDays.map((item) => ({ userId: item.userId, date: dateOnly(item.date), kind: item.kind, startTime: item.startTime, endTime: item.endTime, note: item.note, paidMinutes: item.kind === ManagerDayKind.VACATION ? 480 : item.paidMinutes })),
+      days: dayRows.map((item) => ({ userId: item.userId, date: dateOnly(item.date), kind: item.kind, startTime: item.startTime, endTime: item.endTime, note: item.note, paidMinutes: item.kind === ManagerDayKind.VACATION ? contractMinutesByUserId.get(item.userId) ?? 480 : item.paidMinutes })),
+      contextDays: contextDays.map((item) => ({ userId: item.userId, date: dateOnly(item.date), kind: item.kind, startTime: item.startTime, endTime: item.endTime, note: item.note, paidMinutes: item.kind === ManagerDayKind.VACATION ? contractMinutesByUserId.get(item.userId) ?? 480 : item.paidMinutes })),
       requests: requestRows, vacations: vacationRows, balance
     };
   }
