@@ -22,6 +22,19 @@ function nextMonth(start: Date, count = 1) {
   return new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth() + count, 1));
 }
 
+function weekStartForDay(date: Date) {
+  const start = new Date(date);
+  start.setUTCDate(start.getUTCDate() - ((start.getUTCDay() + 6) % 7));
+  return start;
+}
+
+function monthWeekStarts(start: Date) {
+  const end = nextMonth(start);
+  const result: Date[] = [];
+  for (const cursor = weekStartForDay(start); cursor < end; cursor.setUTCDate(cursor.getUTCDate() + 7)) result.push(new Date(cursor));
+  return result;
+}
+
 function paidMinutes(start?: string, end?: string) {
   if (!start || !end || !/^([01]\d|2[0-3]):[0-5]\d$/.test(start) || !/^([01]\d|2[0-3]):[0-5]\d$/.test(end)) {
     throw new BadRequestException("WORK_TIMES_REQUIRED");
@@ -136,6 +149,33 @@ export class ManagerSchedulesService {
     return this.prisma.managerScheduleMonth.upsert({ where: { tenantId_monthStartDate: { tenantId, monthStartDate: start } }, create: { tenantId, monthStartDate: start }, update: {} });
   }
 
+  private async validateScheduleRange(tenantId: string, monthId: string, from: Date, to: Date) {
+    const [managers, days, vacations] = await Promise.all([
+      this.prisma.user.findMany({ where: { tenantId, employeeSubRole: EmployeeSubRole.MANAGER, isActive: true, isDeleted: false }, select: { id: true, firstName: true, lastName: true } }),
+      this.prisma.managerScheduleDay.findMany({ where: { monthId, date: { gte: from, lt: to } }, select: { userId: true, date: true, kind: true } }),
+      this.prisma.vacationRequest.findMany({ where: { tenantId, requester: { employeeSubRole: EmployeeSubRole.MANAGER }, status: VacationRequestStatus.APPROVED, startDate: { lt: to }, endDate: { gte: from } }, select: { requesterUserId: true, startDate: true, endDate: true } })
+    ]);
+    const keyed = new Map(days.map((day) => [`${day.userId}:${dateOnly(day.date)}`, day.kind]));
+    for (const vacation of vacations) {
+      const cursor = new Date(vacation.startDate > from ? vacation.startDate : from);
+      while (cursor < to && cursor <= vacation.endDate) {
+        const date = dateOnly(cursor);
+        if (keyed.get(`${vacation.requesterUserId}:${date}`) !== ManagerDayKind.VACATION) {
+          throw new BadRequestException({ code: "APPROVED_VACATION_MISSING_FROM_SCHEDULE", userId: vacation.requesterUserId, date });
+        }
+        cursor.setUTCDate(cursor.getUTCDate() + 1);
+      }
+    }
+    for (const manager of managers) {
+      for (const cursor = new Date(from); cursor < to; cursor.setUTCDate(cursor.getUTCDate() + 1)) {
+        const date = dateOnly(cursor);
+        if (!keyed.has(`${manager.id}:${date}`)) {
+          throw new BadRequestException({ code: "INCOMPLETE_MANAGER_SCHEDULE", userId: manager.id, managerName: `${manager.lastName} ${manager.firstName}`, date });
+        }
+      }
+    }
+  }
+
   async setTargets(actor: AuthUser, month: string, dto: MonthTargetsDto) {
     const tenantId = await this.owner(actor);
     const start = monthStart(month);
@@ -156,6 +196,8 @@ export class ManagerSchedulesService {
     if (!target) throw new BadRequestException("ACTIVE_MANAGER_REQUIRED");
     const record = await this.ensureMonth(tenantId, start);
     if (record.status !== ManagerMonthStatus.DRAFT) throw new BadRequestException("MONTH_REOPEN_REQUIRED");
+    const week = await this.prisma.managerScheduleWeek.findUnique({ where: { monthId_weekStartDate: { monthId: record.id, weekStartDate: weekStartForDay(date) } }, select: { status: true } });
+    if (week?.status === ManagerMonthStatus.PUBLISHED) throw new BadRequestException("WEEK_REOPEN_REQUIRED");
     const approved = await this.prisma.vacationRequest.findFirst({ where: { tenantId, requesterUserId: dto.userId, status: VacationRequestStatus.APPROVED, startDate: { lte: date }, endDate: { gte: date } }, select: { id: true } });
     if (approved && dto.kind !== ManagerDayKind.VACATION) throw new BadRequestException("APPROVED_VACATION_REQUIRED");
     const isFullPaidDay = dto.kind === ManagerDayKind.VACATION || dto.kind === ManagerDayKind.SICK_LEAVE;
@@ -174,24 +216,7 @@ export class ManagerSchedulesService {
     if (status === ManagerMonthStatus.PUBLISHED) {
       if (record.expectedWorkDays + record.expectedRestDays === 0) throw new BadRequestException("MONTH_TARGETS_REQUIRED");
       const end = nextMonth(start);
-      const [managers, days, vacations] = await Promise.all([
-        this.prisma.user.findMany({ where: { tenantId, employeeSubRole: EmployeeSubRole.MANAGER, isActive: true, isDeleted: false }, select: { id: true } }),
-        this.prisma.managerScheduleDay.findMany({ where: { monthId: record.id }, select: { userId: true, date: true, kind: true } }),
-        this.prisma.vacationRequest.findMany({ where: { tenantId, requester: { employeeSubRole: EmployeeSubRole.MANAGER }, status: VacationRequestStatus.APPROVED, startDate: { lt: end }, endDate: { gte: start } }, select: { requesterUserId: true, startDate: true, endDate: true } })
-      ]);
-      const keyed = new Map(days.map((day) => [`${day.userId}:${dateOnly(day.date)}`, day.kind]));
-      for (const vacation of vacations) {
-        const cursor = new Date(vacation.startDate > start ? vacation.startDate : start);
-        while (cursor < end && cursor <= vacation.endDate) {
-          if (keyed.get(`${vacation.requesterUserId}:${dateOnly(cursor)}`) !== ManagerDayKind.VACATION) throw new BadRequestException("APPROVED_VACATION_MISSING_FROM_SCHEDULE");
-          cursor.setUTCDate(cursor.getUTCDate() + 1);
-        }
-      }
-      for (const manager of managers) {
-        for (const cursor = new Date(start); cursor < end; cursor.setUTCDate(cursor.getUTCDate() + 1)) {
-          if (!keyed.has(`${manager.id}:${dateOnly(cursor)}`)) throw new BadRequestException("INCOMPLETE_MANAGER_SCHEDULE");
-        }
-      }
+      await this.validateScheduleRange(tenantId, record.id, start, end);
     }
     return this.prisma.$transaction(async (transaction) => {
       const updated = await transaction.managerScheduleMonth.update({
@@ -205,6 +230,17 @@ export class ManagerSchedulesService {
       await transaction.auditLog.create({
         data: { tenantId, actorUserId: actor.id, action: status === ManagerMonthStatus.PUBLISHED ? "MANAGER_MONTH_PUBLISHED" : "MANAGER_MONTH_REOPENED", entityType: "ManagerScheduleMonth", entityId: record.id, metadata: { month } }
       });
+      if (status === ManagerMonthStatus.PUBLISHED) {
+        for (const weekStartDate of monthWeekStarts(start)) {
+          await transaction.managerScheduleWeek.upsert({
+            where: { monthId_weekStartDate: { monthId: record.id, weekStartDate } },
+            create: { monthId: record.id, weekStartDate, status, publishedAt: new Date(), publicationCount: 1 },
+            update: { status, publishedAt: new Date(), publicationCount: { increment: 1 } }
+          });
+        }
+      } else {
+        await transaction.managerScheduleWeek.updateMany({ where: { monthId: record.id }, data: { status, publishedAt: null } });
+      }
       if (status === ManagerMonthStatus.PUBLISHED) {
         const recipients = await transaction.user.findMany({
           where: { tenantId, employeeSubRole: EmployeeSubRole.MANAGER, isActive: true, isDeleted: false },
@@ -224,6 +260,29 @@ export class ManagerSchedulesService {
     });
   }
 
+  async setWeekStatus(actor: AuthUser, month: string, weekStartValue: string, status: ManagerMonthStatus) {
+    const tenantId = await this.owner(actor);
+    const start = monthStart(month);
+    const end = nextMonth(start);
+    const weekStartDate = parseDay(weekStartValue);
+    if (weekStartDate.getUTCDay() !== 1) throw new BadRequestException("WEEK_MUST_START_MONDAY");
+    const weekEnd = new Date(weekStartDate);
+    weekEnd.setUTCDate(weekEnd.getUTCDate() + 7);
+    if (weekStartDate >= end || weekEnd <= start) throw new BadRequestException("WEEK_OUTSIDE_MONTH");
+    const record = await this.ensureMonth(tenantId, start);
+    if (record.status !== ManagerMonthStatus.DRAFT) throw new BadRequestException("MONTH_REOPEN_REQUIRED");
+    const from = weekStartDate > start ? weekStartDate : start;
+    const to = weekEnd < end ? weekEnd : end;
+    if (status === ManagerMonthStatus.PUBLISHED) await this.validateScheduleRange(tenantId, record.id, from, to);
+    const item = await this.prisma.managerScheduleWeek.upsert({
+      where: { monthId_weekStartDate: { monthId: record.id, weekStartDate } },
+      create: { monthId: record.id, weekStartDate, status, publishedAt: status === ManagerMonthStatus.PUBLISHED ? new Date() : null, publicationCount: status === ManagerMonthStatus.PUBLISHED ? 1 : 0 },
+      update: { status, publishedAt: status === ManagerMonthStatus.PUBLISHED ? new Date() : null, ...(status === ManagerMonthStatus.PUBLISHED ? { publicationCount: { increment: 1 } } : {}) }
+    });
+    await this.audit(actor, tenantId, status === ManagerMonthStatus.PUBLISHED ? "MANAGER_WEEK_PUBLISHED" : "MANAGER_WEEK_REOPENED", "ManagerScheduleWeek", item.id, { month, weekStart: weekStartValue });
+    return { weekStart: weekStartValue, status: item.status };
+  }
+
   async getWeek(actor: AuthUser, value: string) {
     const tenantId = this.tenantId(actor, true);
     const start = parseDay(value);
@@ -232,7 +291,7 @@ export class ManagerSchedulesService {
     end.setUTCDate(end.getUTCDate() + 7);
     const [managers, days] = await Promise.all([
       this.prisma.user.findMany({ where: { tenantId, role: UserRole.EMPLOYEE, OR: [{ employeeSubRole: EmployeeSubRole.MANAGER }, { employeeSubRole: EmployeeSubRole.WORKER, isStandInManager: true }], isActive: true, isDeleted: false }, select: { id: true, firstName: true, lastName: true, isStandInManager: true }, orderBy: [{ lastName: "asc" }, { firstName: "asc" }] }),
-      this.prisma.managerScheduleDay.findMany({ where: { date: { gte: start, lt: end }, month: { tenantId, status: ManagerMonthStatus.PUBLISHED } }, select: { userId: true, date: true, kind: true, startTime: true, endTime: true, note: true } })
+      this.prisma.managerScheduleDay.findMany({ where: { date: { gte: start, lt: end }, month: { tenantId, OR: [{ status: ManagerMonthStatus.PUBLISHED }, { weeks: { some: { weekStartDate: start, status: ManagerMonthStatus.PUBLISHED } } }] } }, select: { userId: true, date: true, kind: true, startTime: true, endTime: true, note: true } })
     ]);
     const activeIds = new Set(managers.map((manager) => manager.id));
     return { weekStart: value, managers, days: days.filter((day) => activeIds.has(day.userId)).map((day) => ({ ...day, date: dateOnly(day.date) })) };
@@ -247,27 +306,28 @@ export class ManagerSchedulesService {
     const [tenant, managers, months, requests, vacations] = await Promise.all([
       this.prisma.tenant.findUnique({ where: { id: tenantId }, select: { managerScheduleOwnerId: true } }),
       this.prisma.user.findMany({ where: { tenantId, role: UserRole.EMPLOYEE, OR: [{ employeeSubRole: EmployeeSubRole.MANAGER }, { employeeSubRole: EmployeeSubRole.WORKER, isStandInManager: true }], isActive: true, isDeleted: false }, select: { id: true, firstName: true, lastName: true, isStandInManager: true, contractHours: true }, orderBy: [{ lastName: "asc" }, { firstName: "asc" }] }),
-      this.prisma.managerScheduleMonth.findMany({ where: { tenantId, monthStartDate: { gte: cycleStart, lt: cycleEnd } }, include: { days: true } }),
+      this.prisma.managerScheduleMonth.findMany({ where: { tenantId, monthStartDate: { gte: cycleStart, lt: cycleEnd } }, include: { days: true, weeks: true } }),
       this.prisma.managerDayRequest.findMany({ where: { tenantId, date: { gte: start, lt: end } } }),
       this.prisma.vacationRequest.findMany({ where: { tenantId, requester: { employeeSubRole: EmployeeSubRole.MANAGER }, status: { in: [VacationRequestStatus.PENDING, VacationRequestStatus.APPROVED] }, startDate: { lt: cycleEnd }, endDate: { gte: cycleStart } }, select: { id: true, requesterUserId: true, startDate: true, endDate: true, status: true, reason: true } })
     ]);
     const isOwner = tenant?.managerScheduleOwnerId === actor.id;
     const current = months.find((item) => item.monthStartDate.getTime() === start.getTime());
-    const visibleMonth = isOwner || current?.status === ManagerMonthStatus.PUBLISHED;
+    const publishedWeekStarts = new Set((current?.weeks ?? []).filter((week) => week.status === ManagerMonthStatus.PUBLISHED).map((week) => dateOnly(week.weekStartDate)));
+    const visibleMonth = isOwner || current?.status === ManagerMonthStatus.PUBLISHED || publishedWeekStarts.size > 0;
     const visibleManagers = managers;
     const visibleManagerIds = new Set(visibleManagers.map((manager) => manager.id));
-    const dayRows = visibleMonth ? (current?.days ?? []).filter((day) => visibleManagerIds.has(day.userId)) : [];
+    const dayRows = visibleMonth ? (current?.days ?? []).filter((day) => visibleManagerIds.has(day.userId) && (isOwner || current?.status === ManagerMonthStatus.PUBLISHED || publishedWeekStarts.has(dateOnly(weekStartForDay(day.date))))) : [];
     const boundaryStart = new Date(start);
     boundaryStart.setUTCDate(boundaryStart.getUTCDate() - 5);
     const boundaryEnd = new Date(end);
     boundaryEnd.setUTCDate(boundaryEnd.getUTCDate() + 5);
-    const contextDays = await this.prisma.managerScheduleDay.findMany({
+    const contextDays = isOwner ? await this.prisma.managerScheduleDay.findMany({
       where: {
         userId: { in: visibleManagers.map((item) => item.id) },
         date: { gte: boundaryStart, lt: boundaryEnd },
-        month: { tenantId, ...(isOwner ? {} : { status: ManagerMonthStatus.PUBLISHED }) }
+        month: { tenantId }
       }
-    });
+    }) : [];
     const requestRows = requests.filter((item) => isOwner || item.userId === actor.id).map((item) => ({ userId: item.userId, date: dateOnly(item.date), kind: item.kind, note: item.note }));
     const vacationRows = vacations.filter((item) => (isOwner || item.requesterUserId === actor.id) && item.startDate < end && item.endDate >= start).map((item) => ({ ...item, startDate: dateOnly(item.startDate), endDate: dateOnly(item.endDate) }));
     const approvedDates = new Set<string>();
@@ -305,6 +365,7 @@ export class ManagerSchedulesService {
       expectedWorkDays: visibleMonth ? current?.expectedWorkDays ?? 0 : 0,
       expectedRestDays: visibleMonth ? current?.expectedRestDays ?? 0 : 0,
       cycleStart: dateOnly(cycleStart), cycleEnd: dateOnly(new Date(cycleEnd.getTime() - 86400000)),
+      weeks: monthWeekStarts(start).map((weekStartDate) => ({ weekStart: dateOnly(weekStartDate), status: current?.status === ManagerMonthStatus.PUBLISHED ? ManagerMonthStatus.PUBLISHED : current?.weeks.find((week) => week.weekStartDate.getTime() === weekStartDate.getTime())?.status ?? ManagerMonthStatus.DRAFT })),
       managers: visibleManagers,
       days: dayRows.map((item) => ({ userId: item.userId, date: dateOnly(item.date), kind: item.kind, startTime: item.startTime, endTime: item.endTime, note: item.note, paidMinutes: item.kind === ManagerDayKind.VACATION || item.kind === ManagerDayKind.SICK_LEAVE ? contractMinutesByUserId.get(item.userId) ?? 480 : item.paidMinutes })),
       contextDays: contextDays.map((item) => ({ userId: item.userId, date: dateOnly(item.date), kind: item.kind, startTime: item.startTime, endTime: item.endTime, note: item.note, paidMinutes: item.kind === ManagerDayKind.VACATION || item.kind === ManagerDayKind.SICK_LEAVE ? contractMinutesByUserId.get(item.userId) ?? 480 : item.paidMinutes })),

@@ -12,7 +12,7 @@ function addWarning(result: Record<string, string[]>, userId: string, date: stri
   if (!result[key].includes(message)) result[key].push(message);
 }
 
-export function managerScheduleWarnings(days: ManagerScheduleDay[], month?: string, standInManagerIds: ReadonlySet<string> = new Set()) {
+export function managerScheduleWarnings(days: ManagerScheduleDay[], month?: string, standInManagerIds: ReadonlySet<string> = new Set(), contractMinutesByUserId: ReadonlyMap<string, number> = new Map()) {
   const result: Record<string, string[]> = {};
   const byUser = new Map<string, ManagerScheduleDay[]>();
   for (const day of days) {
@@ -56,7 +56,9 @@ export function managerScheduleWarnings(days: ManagerScheduleDay[], month?: stri
       const shiftStart = dateStart + start;
       const shiftEnd = dateStart + end + (end <= start ? 1440 : 0);
       const duration = shiftEnd - shiftStart;
-      if (duration !== 540) addWarning(result, userId, day.date, `A műszak ${duration / 60} óra; a szokásos 8 óra munka + 1 óra szünet.`);
+      const expectedWorkMinutes = contractMinutesByUserId.get(userId) ?? 480;
+      const expectedDuration = expectedWorkMinutes + 60;
+      if (duration !== expectedDuration) addWarning(result, userId, day.date, `A műszak ${duration / 60} óra; a profil szerint ${expectedWorkMinutes / 60} óra munka + 1 óra szünet az elvárt.`);
       if (previousEnd !== null && shiftStart - previousEnd < 600) {
         const rest = (shiftStart - previousEnd) / 60;
         addWarning(result, userId, day.date, `Csak ${rest} óra pihenő van az előző műszak után (minimum 10 óra).`);

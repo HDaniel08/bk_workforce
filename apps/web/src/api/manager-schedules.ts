@@ -2,7 +2,9 @@ import { api } from "../lib/api";
 
 export type ManagerDayKind = "WORK" | "REST" | "VACATION" | "SICK_LEAVE";
 export type ManagerMonthStatus = "DRAFT" | "PUBLISHED";
-export type ManagerPerson = { id: string; firstName: string; lastName: string; isStandInManager?: boolean; contractHours?: "HOURS_4" | "HOURS_6" | "HOURS_8" | null };
+export type ManagerContractHours = "HOURS_4" | "HOURS_6" | "HOURS_8";
+export type ManagerPerson = { id: string; firstName: string; lastName: string; isStandInManager?: boolean; contractHours?: ManagerContractHours | null };
+export type ManagerScheduleWeek = { weekStart: string; status: ManagerMonthStatus };
 export type ManagerDayRequest = { userId: string; date: string; kind: ManagerDayKind; note: string | null };
 export type ManagerScheduleDay = ManagerDayRequest & { startTime: string | null; endTime: string | null; paidMinutes: number };
 export type ManagerVacation = { id: string; requesterUserId: string; startDate: string; endDate: string; status: "PENDING" | "APPROVED"; reason: string | null };
@@ -16,6 +18,7 @@ export type ManagerMonth = {
   expectedRestDays: number;
   cycleStart: string;
   cycleEnd: string;
+  weeks: ManagerScheduleWeek[];
   managers: ManagerPerson[];
   days: ManagerScheduleDay[];
   contextDays: ManagerScheduleDay[];
@@ -77,4 +80,8 @@ export async function setManagerScheduleDay(month: string, input: { userId: stri
 
 export async function setManagerMonthStatus(month: string, status: ManagerMonthStatus) {
   return (await api.post(`/manager-schedules/months/${month}/${status === "PUBLISHED" ? "publish" : "reopen"}`)).data;
+}
+
+export async function setManagerWeekStatus(month: string, weekStart: string, status: ManagerMonthStatus) {
+  return (await api.post(`/manager-schedules/months/${month}/weeks/${weekStart}/${status === "PUBLISHED" ? "publish" : "reopen"}`)).data;
 }

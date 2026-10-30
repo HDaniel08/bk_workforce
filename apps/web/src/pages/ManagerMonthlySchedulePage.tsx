@@ -1,6 +1,7 @@
+import axios from "axios";
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { getManagerMonth, setManagerMonthStatus, setManagerMonthTargets, setManagerScheduleDay, type ManagerDayKind, type ManagerMonth, type ManagerPerson } from "../api/manager-schedules";
+import { getManagerMonth, setManagerMonthStatus, setManagerMonthTargets, setManagerScheduleDay, setManagerWeekStatus, type ManagerDayKind, type ManagerMonth, type ManagerPerson } from "../api/manager-schedules";
 import { Button } from "../components/ui/Button";
 import { Card } from "../components/ui/Card";
 import { Input } from "../components/ui/Input";
@@ -33,6 +34,21 @@ function label(kind: ManagerDayKind) { return kind === "WORK" ? "Munka" : kind =
 function hours(minutes: number) { return `${(minutes / 60).toLocaleString("hu-HU", { maximumFractionDigits: 1 })} ó`; }
 function signedHours(minutes: number) { return `${minutes > 0 ? "+" : ""}${hours(minutes)}`; }
 
+function weekStartForDate(value: string) {
+  const date = new Date(`${value}T00:00:00Z`);
+  date.setUTCDate(date.getUTCDate() - ((date.getUTCDay() + 6) % 7));
+  return date.toISOString().slice(0, 10);
+}
+
+function publishError(error: unknown) {
+  if (axios.isAxiosError(error)) {
+    const payload = error.response?.data as { code?: string; managerName?: string; date?: string } | undefined;
+    if (payload?.code === "INCOMPLETE_MANAGER_SCHEDULE") return `${payload.managerName ?? "Egy manager"} nincs beosztva ezen a napon: ${payload.date ?? "ismeretlen dátum"}.`;
+    if (payload?.code === "APPROVED_VACATION_MISSING_FROM_SCHEDULE") return `A jóváhagyott szabadság nincs szabadságként rögzítve ezen a napon: ${payload.date ?? "ismeretlen dátum"}.`;
+  }
+  return "A közzétételhez minden érintett napon minden aktív managert be kell osztani, és a jóváhagyott szabadságokat rögzíteni kell.";
+}
+
 export function ManagerMonthlySchedulePage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const requestedMonth = searchParams.get("month");
@@ -45,13 +61,15 @@ export function ManagerMonthlySchedulePage() {
   const [message, setMessage] = useState("");
   const weeks = useMemo(() => monthWeeks(month), [month]);
   const standInManagerIds = useMemo(() => new Set(data?.managers.filter((person) => person.isStandInManager).map((person) => person.id) ?? []), [data]);
+  const contractMinutesByUserId = useMemo(() => new Map(data?.managers.map((person) => [person.id, person.contractHours === "HOURS_4" ? 240 : person.contractHours === "HOURS_6" ? 360 : 480]) ?? []), [data]);
   const warnings = useMemo(() => {
     if (!data?.isOwner || data.status !== "DRAFT") return {};
     const context = data.contextDays.filter((day) => day.userId !== editor?.userId || day.date !== editor.date);
     if (editor) context.push({ ...editor, paidMinutes: 0 });
-    return managerScheduleWarnings(context, month, standInManagerIds);
-  }, [data, editor, month, standInManagerIds]);
-  const savedWarnings = useMemo(() => data?.isOwner && data.status === "DRAFT" ? managerScheduleWarnings(data.contextDays, month, standInManagerIds) : {}, [data, month, standInManagerIds]);
+    return managerScheduleWarnings(context, month, standInManagerIds, contractMinutesByUserId);
+  }, [data, editor, month, standInManagerIds, contractMinutesByUserId]);
+  const savedWarnings = useMemo(() => data?.isOwner && data.status === "DRAFT" ? managerScheduleWarnings(data.contextDays, month, standInManagerIds, contractMinutesByUserId) : {}, [data, month, standInManagerIds, contractMinutesByUserId]);
+  const hasPublishedWeeks = data?.weeks.some((week) => week.status === "PUBLISHED") ?? false;
   const selectedManager = data?.managers.find((manager) => manager.id === editor?.userId);
   const selectedRequest = data?.requests.find((request) => request.userId === editor?.userId && request.date === editor.date);
   const selectedVacation = data?.vacations.find((item) => item.requesterUserId === editor?.userId && editor.date >= item.startDate && editor.date <= item.endDate && item.status === "APPROVED")
@@ -84,7 +102,7 @@ export function ManagerMonthlySchedulePage() {
   }
 
   function openEditor(user: ManagerPerson, date: string) {
-    if (!data?.isOwner || data.status !== "DRAFT") return;
+    if (!data?.isOwner || data.status !== "DRAFT" || data.weeks.find((week) => week.weekStart === weekStartForDate(date))?.status === "PUBLISHED") return;
     const day = data.days.find((item) => item.userId === user.id && item.date === date);
     const approved = vacation(user.id, date);
     setEditor({ userId: user.id, date, kind: approved ? "VACATION" : day?.kind ?? "REST", startTime: day?.startTime ?? "07:00", endTime: day?.endTime ?? "16:00", note: day?.note ?? "" });
@@ -111,31 +129,46 @@ export function ManagerMonthlySchedulePage() {
   async function changeStatus(status: "DRAFT" | "PUBLISHED") {
     setError("");
     try { await setManagerMonthStatus(month, status); await load(); setMessage(status === "PUBLISHED" ? "Beosztás közzétéve." : "Beosztás visszatéve piszkozatba."); }
-    catch { setError("A közzétételhez minden aktív manager minden napját be kell osztani, a jóváhagyott szabadságokat rögzíteni kell és meg kell adni a havi célokat."); }
+    catch (caught) { setError(publishError(caught)); }
+  }
+
+  async function changeWeekStatus(weekStart: string, status: "DRAFT" | "PUBLISHED") {
+    setError(""); setMessage("");
+    try {
+      await setManagerWeekStatus(month, weekStart, status);
+      setEditor(null); await load();
+      setMessage(status === "PUBLISHED" ? "A hét elmentve, lezárva és közzétéve." : "A hét újranyitva szerkesztésre.");
+    } catch (caught) { setError(publishError(caught)); }
   }
 
   return <section className="w-full space-y-5">
     <Card className="space-y-4">
       <div className="flex flex-wrap items-end justify-between gap-3">
-        <div><h2 className="text-2xl font-bold">Managerbeosztás</h2><p className="text-sm text-brown/70">Havi beosztás heti bontásban · {data?.status === "PUBLISHED" ? "Közzétéve" : "Piszkozat"}</p></div>
+        <div><h2 className="text-2xl font-bold">Managerbeosztás</h2><p className="text-sm text-brown/70">Havi beosztás heti bontásban · {data?.status === "PUBLISHED" ? "Közzétéve" : hasPublishedWeeks ? "Részben közzétéve" : "Piszkozat"}</p></div>
         <div className="w-52"><Input label="Hónap" type="month" value={month} onChange={(event) => { if (event.target.value) setSearchParams({ month: event.target.value }); }} /></div>
       </div>
       {data?.isOwner && data.status === "DRAFT" ? <div className="flex flex-wrap items-end gap-3">
         <div className="w-40"><Input label="Elvárt munkanap" type="number" min={0} max={31} value={workTarget} disabled={data.status !== "DRAFT"} onChange={(event) => setWorkTarget(Number(event.target.value))} /></div>
         <div className="w-40"><Input label="Elvárt pihenőnap" type="number" min={0} max={31} value={restTarget} disabled={data.status !== "DRAFT"} onChange={(event) => setRestTarget(Number(event.target.value))} /></div>
-        <Button onClick={saveTargets}>Célok mentése</Button><Button variant="secondary" onClick={() => changeStatus("PUBLISHED")}>Közzététel</Button>
+        <Button onClick={saveTargets}>Célok mentése</Button><Button variant="secondary" onClick={() => changeStatus("PUBLISHED")}>Összes hét mentése és közzététele</Button>
       </div> : data?.isOwner ? <Button onClick={() => changeStatus("DRAFT")}>Vissza piszkozatba</Button> : null}
       {data?.isOwner && data.status === "DRAFT" ? <p className="text-sm text-brown/70">Kéthavi időegyenleg: {data.cycleStart} – {data.cycleEnd}. Munkaóra = műszakhossz mínusz 1 óra szünet; a jóváhagyott szabadság a profil szerinti napi munkaidőt éri.</p> : null}
       {error && !editor ? <p className="text-sm font-semibold text-red">{error}</p> : null}
       {message ? <p className="text-sm font-semibold text-green">{message}</p> : null}
     </Card>
 
-    {data && !data.isOwner && data.status !== "PUBLISHED" ? <Card>Erre a hónapra még nincs közzétett beosztás.</Card> : null}
+    {data && !data.isOwner && data.status !== "PUBLISHED" && !hasPublishedWeeks ? <Card>Erre a hónapra még nincs közzétett beosztás.</Card> : null}
     {data?.managers.length === 0 ? <Card>Nincs aktív manager.</Card> : null}
-    {Boolean(data?.managers.length) && data && (data.isOwner || data.status === "PUBLISHED") ? <div className={data.isOwner && data.status === "DRAFT" ? "grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1fr)_360px] lg:items-start" : "min-w-0"}>
+    {Boolean(data?.managers.length) && data && (data.isOwner || data.status === "PUBLISHED" || hasPublishedWeeks) ? <div className={data.isOwner && data.status === "DRAFT" ? "grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1fr)_360px] lg:items-start" : "min-w-0"}>
       <div className="min-w-0 space-y-4">
-      {weeks.map((week, weekIndex) => <Card key={weekIndex} className="min-w-0 overflow-hidden p-0 sm:p-0">
-        <div className="border-b border-brown/10 bg-cream px-3 py-2 font-bold">{weekIndex + 1}. hét</div>
+      {weeks.map((week, weekIndex) => {
+        const scheduleWeek = data.weeks.find((item) => item.weekStart === week[0]);
+        const weekPublished = scheduleWeek?.status === "PUBLISHED" || data.status === "PUBLISHED";
+        return <Card key={weekIndex} className="min-w-0 overflow-hidden p-0 sm:p-0">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-brown/10 bg-cream px-3 py-2">
+          <div><strong>{weekIndex + 1}. hét</strong><span className="ml-2 text-xs font-normal text-brown/65">{weekPublished ? "Lezárva és közzétéve" : "Piszkozat · a napi módosítások automatikusan mentve"}</span></div>
+          {data.isOwner && data.status === "DRAFT" ? <Button variant="secondary" onClick={() => changeWeekStatus(week[0]!, weekPublished ? "DRAFT" : "PUBLISHED")}>{weekPublished ? "Hét újranyitása" : "Hét mentése és lezárása"}</Button> : null}
+        </div>
         <div className="grid grid-cols-7 divide-x divide-cream/20 bg-brown text-center text-[11px] font-bold text-cream sm:text-sm">
           {week.map((date, index) => <div key={index} className={`min-w-0 px-0.5 py-2 sm:px-2 ${date.startsWith(month) ? "" : "opacity-60"}`}><span className="block">{new Date(`${date}T12:00:00Z`).toLocaleDateString("hu-HU", { weekday: "short" })}</span><span className="block">{Number(date.slice(5, 7))}.{Number(date.slice(-2))}.</span></div>)}
         </div>
@@ -161,7 +194,7 @@ export function ManagerMonthlySchedulePage() {
                 const editing = editor?.userId === manager.id && editor.date === date;
                 const requestText = request ? `Kérés: ${label(request.kind)}${request.note ? ` · ${request.note}` : ""}` : "";
                 return <div key={date} className={`min-w-0 p-0.5 sm:p-1 ${dayWarnings.length ? "bg-red/10" : ""}`}>
-                  <button type="button" aria-pressed={editing} title={[requestText, day?.note, leave?.reason, ...dayWarnings].filter(Boolean).join("\n") || undefined} disabled={!data.isOwner || data.status !== "DRAFT"} onClick={() => openEditor(manager, date)} className={`min-h-24 w-full min-w-0 rounded-md p-1 text-left text-[11px] hover:bg-cream disabled:cursor-default sm:p-2 sm:text-xs ${dayWarnings.length ? "ring-2 ring-red/60" : editing ? "ring-2 ring-brown" : ""}`}>
+                  <button type="button" aria-pressed={editing} title={[requestText, day?.note, leave?.reason, ...dayWarnings].filter(Boolean).join("\n") || undefined} disabled={!data.isOwner || data.status !== "DRAFT" || weekPublished} onClick={() => openEditor(manager, date)} className={`min-h-24 w-full min-w-0 rounded-md p-1 text-left text-[11px] hover:bg-cream disabled:cursor-default sm:p-2 sm:text-xs ${dayWarnings.length ? "ring-2 ring-red/60" : editing ? "ring-2 ring-brown" : ""}`}>
                     <span className="block break-words font-bold">{leave?.status === "APPROVED" ? "Szabadság" : day ? label(day.kind) : "—"}</span>
                     {day?.kind === "WORK" ? <span className="block break-all leading-tight"><span className="block xl:inline">{day.startTime}</span><span className="hidden xl:inline">–</span><span className="block xl:inline">{day.endTime}</span></span> : null}
                     {day?.note ? <span className="hidden truncate text-brown/70 sm:block">{day.note}</span> : null}
@@ -174,7 +207,8 @@ export function ManagerMonthlySchedulePage() {
             </div>
           </div>;
         })}
-      </Card>)}
+      </Card>;
+      })}
       </div>
       {!editor && data.isOwner && data.status === "DRAFT" ? <aside className="hidden rounded-lg bg-white p-5 text-sm text-brown/70 shadow-soft lg:sticky lg:top-4 lg:block">
         <h3 className="mb-2 text-base font-bold text-brown">Nap szerkesztése</h3>

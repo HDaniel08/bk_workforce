@@ -94,4 +94,16 @@ export class ManagerSchedulesController {
   reopen(@CurrentUser() actor: AuthUser, @Param("month") month: string) {
     return this.service.setStatus(actor, month, "DRAFT");
   }
+
+  @Post("months/:month/weeks/:weekStart/publish")
+  @Roles(EmployeeSubRole.MANAGER)
+  publishWeek(@CurrentUser() actor: AuthUser, @Param("month") month: string, @Param("weekStart") weekStart: string) {
+    return this.service.setWeekStatus(actor, month, weekStart, "PUBLISHED");
+  }
+
+  @Post("months/:month/weeks/:weekStart/reopen")
+  @Roles(EmployeeSubRole.MANAGER)
+  reopenWeek(@CurrentUser() actor: AuthUser, @Param("month") month: string, @Param("weekStart") weekStart: string) {
+    return this.service.setWeekStatus(actor, month, weekStart, "DRAFT");
+  }
 }

@@ -207,10 +207,26 @@ model ManagerScheduleMonth {
   publishedAt      DateTime?
   tenant           Tenant             @relation(fields: [tenantId], references: [id])
   days             ManagerScheduleDay[]
+  weeks            ManagerScheduleWeek[]
   createdAt        DateTime           @default(now())
   updatedAt        DateTime           @updatedAt
 
   @@unique([tenantId, monthStartDate])
+}
+
+model ManagerScheduleWeek {
+  id               String             @id @default(cuid())
+  monthId          String
+  weekStartDate    DateTime           @db.Date
+  status           ManagerMonthStatus @default(DRAFT)
+  publicationCount Int                @default(0)
+  publishedAt      DateTime?
+  month            ManagerScheduleMonth @relation(fields: [monthId], references: [id], onDelete: Cascade)
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+
+  @@unique([monthId, weekStartDate])
+  @@index([weekStartDate])
 }
 
 model ManagerScheduleDay {
